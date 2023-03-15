@@ -75,8 +75,9 @@ extern "C" {
 
 // Memory access macros
 //#define MEMUTIL_DEBUG
+//#define MEMUTIL_DEBUG_VERBOSE
 #ifdef USE_MEMUTIL
-#define MWR(x, y)           memutil_swap_write_byte(&x, (uint8_t)y);
+#define MWR(x, y)           memutil_swap_write_char((void*)&x, (uint8_t)y);
 #define MWRP(x, y)          memutil_swap_write_byte(x++, (uint8_t)y);
 #define MRDC(x, y)          memutil_swap_read_char((void*)x, y)
 #define MRDS(x, y)          memutil_swap_read_string((void*)x, y, sizeof(y))  // NOTE: Do NOT use strlen!
@@ -306,9 +307,6 @@ static void nsvg__parseElement(char* s,
 	}
 
 	// List terminator
-   // MWR(attr[nattr++], '\0');
-    //MWR(attr[nattr++], '\0');
-
 	attr[nattr++] = NULL;
 	attr[nattr++] = NULL;
 
@@ -340,7 +338,6 @@ int nsvg__parseXML(char* input,
 	char* mark = s;
 	int state = NSVG_XML_CONTENT;
     char tmp;
-    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s\r\n", __func__);
 #endif
@@ -361,7 +358,7 @@ int nsvg__parseXML(char* input,
 		} else {
 			s++;
 		}
-#ifdef MEMUTIL_DEBUG
+#ifdef MEMUTIL_DEBUG_VERBOSE
         if (!MRDC(s, &tmp)) {
             printf("Looping, at %p = NULL...\r\n", (void*)s);
         } else {
@@ -445,9 +442,6 @@ typedef struct NSVGparser
 
 static void nsvg__xformIdentity(float* t)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	t[0] = 1.0f; t[1] = 0.0f;
 	t[2] = 0.0f; t[3] = 1.0f;
 	t[4] = 0.0f; t[5] = 0.0f;
@@ -455,9 +449,6 @@ static void nsvg__xformIdentity(float* t)
 
 static void nsvg__xformSetTranslation(float* t, float tx, float ty)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	t[0] = 1.0f; t[1] = 0.0f;
 	t[2] = 0.0f; t[3] = 1.0f;
 	t[4] = tx; t[5] = ty;
@@ -465,9 +456,6 @@ static void nsvg__xformSetTranslation(float* t, float tx, float ty)
 
 static void nsvg__xformSetScale(float* t, float sx, float sy)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	t[0] = sx; t[1] = 0.0f;
 	t[2] = 0.0f; t[3] = sy;
 	t[4] = 0.0f; t[5] = 0.0f;
@@ -475,9 +463,6 @@ static void nsvg__xformSetScale(float* t, float sx, float sy)
 
 static void nsvg__xformSetSkewX(float* t, float a)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	t[0] = 1.0f; t[1] = 0.0f;
 	t[2] = tanf(a); t[3] = 1.0f;
 	t[4] = 0.0f; t[5] = 0.0f;
@@ -485,9 +470,6 @@ static void nsvg__xformSetSkewX(float* t, float a)
 
 static void nsvg__xformSetSkewY(float* t, float a)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	t[0] = 1.0f; t[1] = tanf(a);
 	t[2] = 0.0f; t[3] = 1.0f;
 	t[4] = 0.0f; t[5] = 0.0f;
@@ -495,9 +477,6 @@ static void nsvg__xformSetSkewY(float* t, float a)
 
 static void nsvg__xformSetRotation(float* t, float a)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	float cs = cosf(a), sn = sinf(a);
 	t[0] = cs; t[1] = sn;
 	t[2] = -sn; t[3] = cs;
@@ -506,9 +485,6 @@ static void nsvg__xformSetRotation(float* t, float a)
 
 static void nsvg__xformMultiply(float* t, float* s)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	float t0 = t[0] * s[0] + t[1] * s[2];
 	float t2 = t[2] * s[0] + t[3] * s[2];
 	float t4 = t[4] * s[0] + t[5] * s[2] + s[4];
@@ -522,9 +498,6 @@ static void nsvg__xformMultiply(float* t, float* s)
 
 static void nsvg__xformInverse(float* inv, float* t)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	double det = (double)t[0] * t[3] - (double)t[2] * t[1];
 	double invdet = 1.0 / det;
 	if (det > -1e-6 && det < -1e-6) {
@@ -541,9 +514,6 @@ static void nsvg__xformInverse(float* inv, float* t)
 
 static void nsvg__xformPremultiply(float* t, float* s)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	float s2[6];
 	memcpy(s2, s, sizeof(float)*6);
 	nsvg__xformMultiply(s2, t);
@@ -552,18 +522,12 @@ static void nsvg__xformPremultiply(float* t, float* s)
 
 static void nsvg__xformPoint(float* dx, float* dy, float x, float y, float* t)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	*dx = x*t[0] + y*t[2] + t[4];
 	*dy = x*t[1] + y*t[3] + t[5];
 }
 
 static void nsvg__xformVec(float* dx, float* dy, float x, float y, float* t)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	*dx = x*t[0] + y*t[2];
 	*dy = x*t[1] + y*t[3];
 }
@@ -572,27 +536,18 @@ static void nsvg__xformVec(float* dx, float* dy, float x, float y, float* t)
 
 static int nsvg__ptInBounds(float* pt, float* bounds)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	return pt[0] >= bounds[0] && pt[0] <= bounds[2] && pt[1] >= bounds[1] && pt[1] <= bounds[3];
 }
 
 
 static double nsvg__evalBezier(double t, double p0, double p1, double p2, double p3)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	double it = 1.0-t;
 	return it*it*it*p0 + 3.0*it*it*t*p1 + 3.0*it*t*t*p2 + t*t*t*p3;
 }
 
 static void nsvg__curveBounds(float* bounds, float* curve)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	int i, j, count;
 	double roots[2], a, b, c, b2ac, t, v;
 	float* v0 = &curve[0];
@@ -732,17 +687,11 @@ static void nsvg__deleteParser(NSVGparser* p)
 
 static void nsvg__resetPath(NSVGparser* p)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	p->npts = 0;
 }
 
 static void nsvg__addPoint(NSVGparser* p, float x, float y)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	if (p->npts+1 > p->cpts) {
 		p->cpts = p->cpts ? p->cpts*2 : 8;
 		p->pts = (float*)realloc(p->pts, p->cpts*2*sizeof(float));
@@ -755,9 +704,6 @@ static void nsvg__addPoint(NSVGparser* p, float x, float y)
 
 static void nsvg__moveTo(NSVGparser* p, float x, float y)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	if (p->npts > 0) {
 		p->pts[(p->npts-1)*2+0] = x;
 		p->pts[(p->npts-1)*2+1] = y;
@@ -768,9 +714,6 @@ static void nsvg__moveTo(NSVGparser* p, float x, float y)
 
 static void nsvg__lineTo(NSVGparser* p, float x, float y)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	float px,py, dx,dy;
 	if (p->npts > 0) {
 		px = p->pts[(p->npts-1)*2+0];
@@ -785,9 +728,6 @@ static void nsvg__lineTo(NSVGparser* p, float x, float y)
 
 static void nsvg__cubicBezTo(NSVGparser* p, float cpx1, float cpy1, float cpx2, float cpy2, float x, float y)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	nsvg__addPoint(p, cpx1, cpy1);
 	nsvg__addPoint(p, cpx2, cpy2);
 	nsvg__addPoint(p, x, y);
@@ -795,17 +735,11 @@ static void nsvg__cubicBezTo(NSVGparser* p, float cpx1, float cpy1, float cpx2, 
 
 static NSVGattrib* nsvg__getAttr(NSVGparser* p)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	return &p->attr[p->attrHead];
 }
 
 static void nsvg__pushAttr(NSVGparser* p)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	if (p->attrHead < NSVG_MAX_ATTR-1) {
 		p->attrHead++;
 		memcpy(&p->attr[p->attrHead], &p->attr[p->attrHead-1], sizeof(NSVGattrib));
@@ -814,18 +748,12 @@ static void nsvg__pushAttr(NSVGparser* p)
 
 static void nsvg__popAttr(NSVGparser* p)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	if (p->attrHead > 0)
 		p->attrHead--;
 }
 
 static NSVGgradientData* nsvg__findGradientData(NSVGparser* p, const char* id)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
     char tmp_buf[2048];
 	NSVGgradientData* grad = p->gradients;
 	while (grad) {
@@ -838,9 +766,6 @@ static NSVGgradientData* nsvg__findGradientData(NSVGparser* p, const char* id)
 
 static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const float* bounds, char* paintType)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	NSVGattrib* attr = nsvg__getAttr(p);
 	NSVGgradientData* data = NULL;
 	NSVGgradientData* ref = NULL;
@@ -901,9 +826,6 @@ static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const f
 
 static void nsvg__addShape(NSVGparser* p)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	NSVGattrib* attr = nsvg__getAttr(p);
 	float scale = 1.0f;
 	NSVGshape *shape, *cur, *prev;
@@ -989,9 +911,6 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 	int i;
     char tmp;
 
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 
 	if (p->npts < 4)
 		return;
@@ -1049,9 +968,6 @@ static const char* nsvg__getNextPathItem(const char* s, char* it)
     char tmp;
 	MWR(it[0], '\0');
 
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 
 	// Skip white spaces and commas
 	while (MRDC(s, &tmp) && (nsvg__isspace(MRDC(s, &tmp)) || MRDC(s, &tmp) == ',')) s++;
@@ -1632,9 +1548,11 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 	NSVGattrib* attr = nsvg__getAttr(p);
 	if (!attr) return 0;
 
+#ifdef MEMUTIL_DEBUG
     printf("name -> %s, ", MRDS(name, tmp_buf));
     printf("value -> %s\r\n", MRDS(value, tmp_buf));
-	
+#endif
+
 	if (strcmp(MRDS(name, tmp_buf), "style") == 0) {
 		nsvg__parseStyle(p, value);
 	} else if (strcmp(MRDS(name, tmp_buf), "display") == 0) {
@@ -1749,9 +1667,6 @@ static void nsvg__parseStyle(NSVGparser* p, const char* str)
 
 static void nsvg__parseAttribs(NSVGparser* p, const char** attr)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	int i;
     char tmp_buf[2048];
 	for (i = 0; ((MRDS(attr[i], tmp_buf))); i += 2)
@@ -1765,9 +1680,6 @@ static void nsvg__parseAttribs(NSVGparser* p, const char** attr)
 
 static int nsvg__getArgsPerElement(char cmd)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
     char tmp;
 	switch (MRDC(&cmd, &tmp)) {
 		case 'v':
@@ -1799,9 +1711,6 @@ static int nsvg__getArgsPerElement(char cmd)
 
 static void nsvg__pathMoveTo(NSVGparser* p, float* cpx, float* cpy, float* args, int rel)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	if (rel) {
 		*cpx += args[0];
 		*cpy += args[1];
@@ -1814,9 +1723,6 @@ static void nsvg__pathMoveTo(NSVGparser* p, float* cpx, float* cpy, float* args,
 
 static void nsvg__pathLineTo(NSVGparser* p, float* cpx, float* cpy, float* args, int rel)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	if (rel) {
 		*cpx += args[0];
 		*cpy += args[1];
@@ -1829,9 +1735,6 @@ static void nsvg__pathLineTo(NSVGparser* p, float* cpx, float* cpy, float* args,
 
 static void nsvg__pathHLineTo(NSVGparser* p, float* cpx, float* cpy, float* args, int rel)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	if (rel)
 		*cpx += args[0];
 	else
@@ -1841,9 +1744,6 @@ static void nsvg__pathHLineTo(NSVGparser* p, float* cpx, float* cpy, float* args
 
 static void nsvg__pathVLineTo(NSVGparser* p, float* cpx, float* cpy, float* args, int rel)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	if (rel)
 		*cpy += args[0];
 	else
@@ -1854,9 +1754,6 @@ static void nsvg__pathVLineTo(NSVGparser* p, float* cpx, float* cpy, float* args
 static void nsvg__pathCubicBezTo(NSVGparser* p, float* cpx, float* cpy,
 								 float* cpx2, float* cpy2, float* args, int rel)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	float x1, y1, x2, y2, cx1, cy1, cx2, cy2;
 	
 	x1 = *cpx;
@@ -1888,9 +1785,6 @@ static void nsvg__pathCubicBezTo(NSVGparser* p, float* cpx, float* cpy,
 static void nsvg__pathCubicBezShortTo(NSVGparser* p, float* cpx, float* cpy,
 									  float* cpx2, float* cpy2, float* args, int rel)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	float x1, y1, x2, y2, cx1, cy1, cx2, cy2;
 	
 	x1 = *cpx;
@@ -1921,9 +1815,6 @@ static void nsvg__pathCubicBezShortTo(NSVGparser* p, float* cpx, float* cpy,
 static void nsvg__pathQuadBezTo(NSVGparser* p, float* cpx, float* cpy,
 								float* cpx2, float* cpy2, float* args, int rel)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	float x1, y1, x2, y2, cx, cy;
 	float cx1, cy1, cx2, cy2;
 	
@@ -1958,9 +1849,6 @@ static void nsvg__pathQuadBezTo(NSVGparser* p, float* cpx, float* cpy,
 static void nsvg__pathQuadBezShortTo(NSVGparser* p, float* cpx, float* cpy,
 									 float* cpx2, float* cpy2, float* args, int rel)
 {
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
 	float x1, y1, x2, y2, cx, cy;
 	float cx1, cy1, cx2, cy2;
 	
@@ -2620,7 +2508,9 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
     printf("%s\r\n", __func__);
 #endif
 
+#ifdef MEMUTIL_DEBUG
     printf("el -> %s\r\n", MRDS(el, tmp_buf));
+#endif
 
 	if (p->defsFlag) {
 		// Skip everything but gradients in defs
