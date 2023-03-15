@@ -536,19 +536,12 @@ int generateGcode(int argc, char* argv[]) {
   //seed48(NULL);
 
   printf("Argc:%d\n", argc);
+
   if(argc < 3) {
     help();
     return -1;
   }
 
-  //TEMP
-  fitToMaterial = 1.0;
-  zFloor = 3.0;
-  ztraverse = zFloor+3.; //dynamicize machine dimensions in z.
-  fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
-  //TEMP
-  
-  /* TODO - fix getopt, causing segaults right now?
   while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
     switch(ch) {
     case 'P': pwr = atoi(optarg);
@@ -595,21 +588,16 @@ int generateGcode(int argc, char* argv[]) {
       return(1);
       break;
     }
-  }*/  
+  }
   
   
   //move above to main
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
-//TEMP
-  g_image = nsvgParseFromFile(argv[5],"px",96);
-//TEMP
-  //g_image = nsvgParseFromFile(argv[optind],"px",96);
+
+  g_image = nsvgParseFromFile(argv[optind],"px",96);
   if(g_image == NULL) {
-//TEMP
-    printf("error: Can't open input %s\n",argv[5]);
-//TEMP
-    //printf("error: Can't open input %s\n",argv[optind]);
+    printf("error: Can't open input %s\n",argv[optind]);
     return -1;
   }
 

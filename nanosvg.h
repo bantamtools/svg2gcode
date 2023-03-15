@@ -324,15 +324,10 @@ static void nsvg__parseElement(char* s,
 #endif
 
 	// Call callbacks.
-        printf("START CB\r\n");
 	if (start && startelCb)
 		(*startelCb)(ud, name, attr);
-    
-    printf("EXIT CB\r\n");
 	if (end && endelCb)
 		(*endelCb)(ud, name);
-
-    printf("EXIT PARSE ELEMENT\r\n");
 }
 
 int nsvg__parseXML(char* input,
@@ -358,8 +353,6 @@ int nsvg__parseXML(char* input,
 			mark = s;
 			state = NSVG_XML_TAG;
 		} else if (MRDC(s, &tmp) == '>' && state == NSVG_XML_TAG) {
-
-            printf("HIT > BRACKET\r\n");
 			// Start of a content or new tag.
             MWRP(s, '\0');
 			nsvg__parseElement(mark, startelCb, endelCb, ud);
@@ -368,6 +361,13 @@ int nsvg__parseXML(char* input,
 		} else {
 			s++;
 		}
+#ifdef MEMUTIL_DEBUG
+        if (!MRDC(s, &tmp)) {
+            printf("Looping, at %p = NULL...\r\n", (void*)s);
+        } else {
+            printf("Looping, at %p = %c...\r\n", (void*)s, MRDC(s, &tmp));
+        }
+#endif
 	}
 	
 	return 1;
@@ -1093,7 +1093,8 @@ static const char* nsvg__getNextPathItem(const char* s, char* it)
 		MWR(it[i], '\0');
 	} else {
 		// Parse command
-		MWR(it[0], MRDC(s, &tmp));
+        tmp = MRDC(s, &tmp);
+		MWR(it[0], tmp);
         s++;
 		MWR(it[1], '\0');
 		return s;
@@ -1138,7 +1139,7 @@ static unsigned int nsvg__parseColorHex(const char* str)
     char tmp;
     char tmp_buf[2048];
 	str++; // skip #
-        printf("%s\r\n", __func__);
+
 	// Calculate number of characters.
 	while(MRDC(&str[n], &tmp) && !nsvg__isspace(MRDC(&str[n], &tmp)))
 		n++;
@@ -1631,7 +1632,7 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 	NSVGattrib* attr = nsvg__getAttr(p);
 	if (!attr) return 0;
 
-    printf("Attr name -> %s ", MRDS(name, tmp_buf));
+    printf("name -> %s, ", MRDS(name, tmp_buf));
     printf("value -> %s\r\n", MRDS(value, tmp_buf));
 	
 	if (strcmp(MRDS(name, tmp_buf), "style") == 0) {
@@ -1642,7 +1643,6 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 		else
 			attr->visible = 1;
 	} else if (strcmp(MRDS(name, tmp_buf), "fill") == 0) {
-        printf("FILL!\r\n");
 		if (strcmp(MRDS(value, tmp_buf), "none") == 0) {
 			attr->hasFill = 0;
 		} else if (strncmp(MRDS(value, tmp_buf), "url(", 4) == 0) {
@@ -1657,9 +1657,7 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 	} else if (strcmp(MRDS(name, tmp_buf), "fill-opacity") == 0) {
 		attr->fillOpacity = nsvg__parseFloat(p, value, 2);
 	} else if (strcmp(MRDS(name, tmp_buf), "stroke") == 0) {
-        printf("STROKE!\r\n");
 		if (strcmp(MRDS(value, tmp_buf), "none") == 0) {
-            printf("NO STROKE\r\n");
 			attr->hasStroke = 0;
 		} else if (strncmp(MRDS(value, tmp_buf), "url(", 4) == 0) {
 			attr->hasStroke = 2;
@@ -2643,7 +2641,6 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
 		if (p->pathFlag)	// Do not allow nested paths.
 			return;
 		nsvg__pushAttr(p);
-        printf("PATH!\r\n");
 		nsvg__parsePath(p, attr);
 		nsvg__popAttr(p);
 	} else if (strcmp(MRDS(el, tmp_buf), "rect") == 0) {
@@ -2836,8 +2833,6 @@ NSVGimage* nsvgParse(char* input, const char* units, float dpi)
 		return NULL;
 	}
 	p->dpi = dpi;
-
-    printf("nsvgParse INDEX -> 0x%p\r\n", (void*)input);
 
 	nsvg__parseXML(input, nsvg__startElement, nsvg__endElement, nsvg__content, p);
 
