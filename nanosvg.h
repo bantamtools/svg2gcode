@@ -74,18 +74,26 @@ extern "C" {
 */
 
 // Memory access macros
-//#define MEMUTIL_DEBUG
+#define MEMUTIL_DEBUG
 //#define MEMUTIL_DEBUG_VERBOSE
 #ifdef USE_MEMUTIL
 #define MWR(x, y)           memutil_swap_write_char((void*)&x, (uint8_t)y);
 #define MWRP(x, y)          memutil_swap_write_byte(x++, (uint8_t)y);
+#define MWRF(x, y)          memutil_swap_write_float((void*)x, y);
+#define MWRFP(x, y)          memutil_swap_write_float((void*)&x, y);
+
 #define MRDC(x, y)          memutil_swap_read_char((void*)x, y)
 #define MRDS(x, y)          memutil_swap_read_string((void*)x, y, sizeof(y))  // NOTE: Do NOT use strlen!
+#define MRDF(x, y)          memutil_swap_read_float((void*)x, y)
 #else
 #define MWR(x, y)           x = y;
 #define MWRP(x, y)          *x++ = y;
 #define MRDC(x, y)          *x
 #define MRDS(x, y)          x
+
+#define MRDF(x, y)          *x
+#define MWRF(x, y)          *x = y;
+#define MWRFP(x, y)         x = y;
 #endif
 
 #define NSVG_PAINT_NONE 0
@@ -522,8 +530,8 @@ static void nsvg__xformPremultiply(float* t, float* s)
 
 static void nsvg__xformPoint(float* dx, float* dy, float x, float y, float* t)
 {
-	*dx = x*t[0] + y*t[2] + t[4];
-	*dy = x*t[1] + y*t[3] + t[5];
+    MWRFP(*dx, x*t[0] + y*t[2] + t[4])
+    MWRFP(*dy, x*t[1] + y*t[3] + t[5])
 }
 
 static void nsvg__xformVec(float* dx, float* dy, float x, float y, float* t)
@@ -680,7 +688,11 @@ static void nsvg__deleteParser(NSVGparser* p)
 		nsvg__deletePaths(p->plist);
 		nsvg__deleteGradientData(p->gradients);
 		nsvgDelete(p->image);
+#ifdef USE_MEMUTIL
+        memutil_swap_free(p->pts);
+#else
 		free(p->pts);
+#endif
 		free(p);
 	}
 }
@@ -692,21 +704,32 @@ static void nsvg__resetPath(NSVGparser* p)
 
 static void nsvg__addPoint(NSVGparser* p, float x, float y)
 {
+    float ftmp;
 	if (p->npts+1 > p->cpts) {
-		p->cpts = p->cpts ? p->cpts*2 : 8;
-		p->pts = (float*)realloc(p->pts, p->cpts*2*sizeof(float));
+		p->cpts = p->cpts ? p->cpts*2 : 8;	
+#ifdef USE_MEMUTIL
+        float *tmp_pts = (float*)memutil_swap_malloc(p->cpts*2*sizeof(float));  // TODO: Need realloc
+        if (!tmp_pts) return;
+        for (int i = 0; i < p->npts; i++) {
+            MWRF(&tmp_pts[i], MRDF(&p->pts[i], &ftmp));
+        }
+        memutil_swap_free(p->pts);
+        p->pts = tmp_pts;
+#else
+        p->pts = (float*)realloc(p->pts, p->cpts*2*sizeof(float));
+#endif
 		if (!p->pts) return;
 	}
-	p->pts[p->npts*2+0] = x;
-	p->pts[p->npts*2+1] = y;
+    MWRF(&p->pts[p->npts*2+0], x)
+    MWRF(&p->pts[p->npts*2+1], y)
 	p->npts++;
 }
 
 static void nsvg__moveTo(NSVGparser* p, float x, float y)
 {
 	if (p->npts > 0) {
-		p->pts[(p->npts-1)*2+0] = x;
-		p->pts[(p->npts-1)*2+1] = y;
+        MWRF(&p->pts[(p->npts-1)*2+0], x)
+        MWRF(&p->pts[(p->npts-1)*2+1], y)
 	} else {
 		nsvg__addPoint(p, x, y);
 	}
@@ -714,10 +737,10 @@ static void nsvg__moveTo(NSVGparser* p, float x, float y)
 
 static void nsvg__lineTo(NSVGparser* p, float x, float y)
 {
-	float px,py, dx,dy;
+	float px,py, dx,dy, ftmp;
 	if (p->npts > 0) {
-		px = p->pts[(p->npts-1)*2+0];
-		py = p->pts[(p->npts-1)*2+1];
+        MWRF(&px, MRDF(&p->pts[(p->npts-1)*2+0], &ftmp))
+        MWRF(&py, MRDF(&p->pts[(p->npts-1)*2+1], &ftmp))
 		dx = x - px;
 		dy = y - py;
 		nsvg__addPoint(p, px + dx/3.0f, py + dy/3.0f);
@@ -910,20 +933,25 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 	float* curve;
 	int i;
     char tmp;
+    float ftmp;
 
 
 	if (p->npts < 4)
 		return;
 
 	if (MRDC(&closed, &tmp))
-		nsvg__lineTo(p, p->pts[0], p->pts[1]);
+		nsvg__lineTo(p, MRDF(&p->pts[0], &ftmp), MRDF(&p->pts[1], &ftmp));
 
 	path = (NSVGpath*)malloc(sizeof(NSVGpath));
 
 	if (path == NULL) goto error;
 	memset(path, 0, sizeof(NSVGpath));
 
+#ifdef USE_MEMUTIL
+    path->pts = (float*)memutil_swap_malloc(p->npts*2*sizeof(float));
+#else
 	path->pts = (float*)malloc(p->npts*2*sizeof(float));
+#endif
 
 	if (path->pts == NULL) goto error;
 	path->closed = MRDC(&closed, &path->closed);
@@ -931,7 +959,7 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 	
 	// Transform path.
 	for (i = 0; i < p->npts; ++i)
-		nsvg__xformPoint(&path->pts[i*2], &path->pts[i*2+1], p->pts[i*2], p->pts[i*2+1], attr->xform);
+		nsvg__xformPoint(&path->pts[i*2], &path->pts[i*2+1], MRDF(&p->pts[i*2], &ftmp), MRDF(&p->pts[i*2+1], &ftmp), attr->xform);
 	
 	// Find bounds
 	for (i = 0; i < path->npts-1; i += 3) {
@@ -957,7 +985,11 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 
 error:
 	if (path != NULL) {
+#ifdef USE_MEMUTIL
+        if (path->pts != NULL) memutil_swap_free(path->pts);
+#else
 		if (path->pts != NULL) free(path->pts);
+#endif
 		free(path);
 	}
 }
@@ -1252,7 +1284,7 @@ static unsigned int nsvg__parseColorName(const char* str)
 #ifdef MEMUTIL_DEBUG
     printf("%s\r\n", __func__);
 #endif
-	int i, ncolors = sizeof(nsvg__colors) / sizeof(NSVGNamedColor);
+                int i, ncolors = sizeof(nsvg__colors) / sizeof(NSVGNamedColor);
 	char tmp_buf[2048];
 
 	for (i = 0; i < ncolors; i++) {
@@ -2021,6 +2053,7 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 	int nargs;
 	int rargs;
 	float cpx, cpy, cpx2, cpy2;
+    float ftmp;
 	const char* temp[4];
 	char closedFlag;
 	int i;
@@ -2127,8 +2160,8 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 					// Commit path.
 					if (p->npts > 0) {
 						// Move current point to first point
-						cpx = p->pts[0];
-						cpy = p->pts[1];
+                        MWRF(&cpx, MRDF(&p->pts[0], &ftmp));
+                        MWRF(&cpy, MRDF(&p->pts[1], &ftmp));
 						cpx2 = cpx; cpy2 = cpy;
 						nsvg__addPath(p, closedFlag);
 					}
@@ -2637,6 +2670,7 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 	float tx, ty, sx, sy, us, bounds[4], t[6];
 	int i;
 	float* pt;
+    float ftmp;
 
 	// Guess image size if not set completely.
 	nsvg__imageBounds(p, bounds);
@@ -2691,8 +2725,8 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 			path->bounds[3] = (path->bounds[3] + ty) * sy;
 			for (i =0; i < path->npts; i++) {
 				pt = &path->pts[i*2];
-				pt[0] = (pt[0] + tx) * sx;
-				pt[1] = (pt[1] + ty) * sy;
+                MWRF(&pt[0], (MRDF(&pt[0], &ftmp) + tx) * sx)
+                MWRF(&pt[1], (MRDF(&pt[1], &ftmp) + tx) * sx)
 			}
 		}
 
@@ -2763,6 +2797,7 @@ NSVGimage* nsvgParseFromFile(const char* filename, const char* units, float dpi)
 	image = nsvgParse(data, units, dpi);
 #ifdef USE_MEMUTIL
     memutil_swap_force_write(); // Make sure no holdover data left to be written to SD
+    //memutil_close();
 	memutil_swap_free(data);
 #else
 	free(data);
