@@ -74,7 +74,7 @@ extern "C" {
 */
 
 // Memory access macros
-#define MEMUTIL_DEBUG
+//#define MEMUTIL_DEBUG
 //#define MEMUTIL_DEBUG_VERBOSE
 #ifdef USE_MEMUTIL
 #define MWR(x, y)           memutil_swap_write_char((void*)&x, (uint8_t)y);
@@ -84,14 +84,21 @@ extern "C" {
 
 #define MRDC(x, y)          memutil_swap_read_char((void*)x, y)
 #define MRDS(x, y)          memutil_swap_read_string((void*)x, y, sizeof(y))  // NOTE: Do NOT use strlen!
+#ifdef MEMUTIL_DEBUG
+#define MRDF(x, y)          float_check(memutil_swap_read_float((void*)x, y))
+#else
 #define MRDF(x, y)          memutil_swap_read_float((void*)x, y)
+#endif
 #else
 #define MWR(x, y)           x = y;
 #define MWRP(x, y)          *x++ = y;
 #define MRDC(x, y)          *x
 #define MRDS(x, y)          x
-
+#ifdef MEMUTIL_DEBUG
+#define MRDF(x, y)          float_check(*x)
+#else
 #define MRDF(x, y)          *x
+#endif
 #define MWRF(x, y)          *x = y;
 #define MWRFP(x, y)         x = y;
 #endif
@@ -199,6 +206,17 @@ void nsvgDelete(NSVGimage* image);
 	#define NSVG_INLINE inline
 #endif
 
+#ifdef MEMUTIL_DEBUG
+// DEBUG: Check floats from swap / internal memory
+float float_check(float f) {
+    if (isnan(f)) {
+        printf("F -> NaN\r\n");
+    } else {
+        printf("F -> %3.2f\r\n", f);
+    }
+    return f;
+}
+#endif
 
 static int nsvg__isspace(char c)
 {
@@ -544,7 +562,8 @@ static void nsvg__xformVec(float* dx, float* dy, float x, float y, float* t)
 
 static int nsvg__ptInBounds(float* pt, float* bounds)
 {
-	return pt[0] >= bounds[0] && pt[0] <= bounds[2] && pt[1] >= bounds[1] && pt[1] <= bounds[3];
+    float ftmp1, ftmp2;
+    return MRDF(&pt[0], &ftmp1) >= bounds[0] && MRDF(&pt[0], &ftmp1) <= bounds[2] && MRDF(&pt[1], &ftmp2) >= bounds[1] && MRDF(&pt[1], &ftmp2) <= bounds[3];
 }
 
 
@@ -558,16 +577,18 @@ static void nsvg__curveBounds(float* bounds, float* curve)
 {
 	int i, j, count;
 	double roots[2], a, b, c, b2ac, t, v;
-	float* v0 = &curve[0];
+    float ftmp[4];
+
+	float* v0 = &curve[0];  //noconvert
 	float* v1 = &curve[2];
 	float* v2 = &curve[4];
 	float* v3 = &curve[6];
 
 	// Start the bounding box by end points
-	bounds[0] = nsvg__minf(v0[0], v3[0]);
-	bounds[1] = nsvg__minf(v0[1], v3[1]);
-	bounds[2] = nsvg__maxf(v0[0], v3[0]);
-	bounds[3] = nsvg__maxf(v0[1], v3[1]);
+    MWRF(&bounds[0], nsvg__minf(MRDF(&v0[0], &ftmp[0]), MRDF(&v3[0], &ftmp[1])));
+    MWRF(&bounds[1], nsvg__minf(MRDF(&v0[1], &ftmp[0]), MRDF(&v3[1], &ftmp[1])));
+    MWRF(&bounds[2], nsvg__maxf(MRDF(&v0[0], &ftmp[0]), MRDF(&v3[0], &ftmp[1])));
+    MWRF(&bounds[3], nsvg__maxf(MRDF(&v0[1], &ftmp[0]), MRDF(&v3[1], &ftmp[1])));
 
 	// Bezier curve fits inside the convex hull of it's control points.
 	// If control points are inside the bounds, we're done.
@@ -576,10 +597,12 @@ static void nsvg__curveBounds(float* bounds, float* curve)
 
 	// Add bezier curve inflection points in X and Y.
 	for (i = 0; i < 2; i++) {
-		a = -3.0 * v0[i] + 9.0 * v1[i] - 9.0 * v2[i] + 3.0 * v3[i];
-		b = 6.0 * v0[i] - 12.0 * v1[i] + 6.0 * v2[i];
-		c = 3.0 * v1[i] - 3.0 * v0[i];
-		count = 0;
+
+        MWRF(&a, -3.0 * MRDF(&v0[i], &ftmp[0]) + 9.0 * MRDF(&v1[i], &ftmp[1]) - 9.0 * MRDF(&v2[i], &ftmp[2]) + 3.0 * MRDF(&v3[i], &ftmp[3]));
+        MWRF(&b, 6.0 * MRDF(&v0[i], &ftmp[0]) - 12.0 * MRDF(&v1[i], &ftmp[1]) + 6.0 * MRDF(&v2[i], &ftmp[2]));
+        MWRF(&c, 3.0 * MRDF(&v1[i], &ftmp[1]) - 3.0 * MRDF(&v0[i], &ftmp[2]));
+
+        count = 0;
 		if (fabs(a) < NSVG_EPSILON) {
 			if (fabs(b) > NSVG_EPSILON) {
 				t = -c / b;
@@ -598,7 +621,7 @@ static void nsvg__curveBounds(float* bounds, float* curve)
 			}
 		}
 		for (j = 0; j < count; j++) {
-			v = nsvg__evalBezier(roots[j], v0[i], v1[i], v2[i], v3[i]);
+			v = nsvg__evalBezier(roots[j], MRDF(&v0[i], &ftmp[0]), MRDF(&v1[i], &ftmp[1]), MRDF(&v2[i], &ftmp[2]), MRDF(&v3[i], &ftmp[3]));
 			bounds[0+i] = nsvg__minf(bounds[0+i], (float)v);
 			bounds[2+i] = nsvg__maxf(bounds[2+i], (float)v);
 		}
@@ -650,7 +673,11 @@ static void nsvg__deletePaths(NSVGpath* path)
 	while (path) {
 		NSVGpath *next = path->next;
 		if (path->pts != NULL)
+#ifdef USE_MEMUTIL
+			memutil_swap_free(path->pts);
+#else
 			free(path->pts);
+#endif
 		free(path);
 		path = next;
 	}
@@ -688,11 +715,11 @@ static void nsvg__deleteParser(NSVGparser* p)
 		nsvg__deletePaths(p->plist);
 		nsvg__deleteGradientData(p->gradients);
 		nsvgDelete(p->image);
-#ifdef USE_MEMUTIL
-        memutil_swap_free(p->pts);
-#else
+//#ifdef USE_MEMUTIL
+//        memutil_swap_free(p->pts);
+//#else
 		free(p->pts);
-#endif
+//#endif
 		free(p);
 	}
 }
@@ -707,29 +734,27 @@ static void nsvg__addPoint(NSVGparser* p, float x, float y)
     float ftmp;
 	if (p->npts+1 > p->cpts) {
 		p->cpts = p->cpts ? p->cpts*2 : 8;	
-#ifdef USE_MEMUTIL
-        float *tmp_pts = (float*)memutil_swap_malloc(p->cpts*2*sizeof(float));  // TODO: Need realloc
-        if (!tmp_pts) return;
-        for (int i = 0; i < p->npts; i++) {
-            MWRF(&tmp_pts[i], MRDF(&p->pts[i], &ftmp));
-        }
-        memutil_swap_free(p->pts);
-        p->pts = tmp_pts;
-#else
+//#ifdef USE_MEMUTIL
+//        p->pts = (float*)memutil_swap_realloc(p->pts, p->cpts*2*sizeof(float));
+//#else
         p->pts = (float*)realloc(p->pts, p->cpts*2*sizeof(float));
-#endif
+//#endif
 		if (!p->pts) return;
 	}
-    MWRF(&p->pts[p->npts*2+0], x)
-    MWRF(&p->pts[p->npts*2+1], y)
-	p->npts++;
+ //   MWRF(&p->pts[p->npts*2+0], x)
+ //   MWRF(&p->pts[p->npts*2+1], y)
+    p->pts[p->npts*2+0] = x;
+	p->pts[p->npts*2+1] = y;
+    p->npts++;
 }
 
 static void nsvg__moveTo(NSVGparser* p, float x, float y)
 {
 	if (p->npts > 0) {
-        MWRF(&p->pts[(p->npts-1)*2+0], x)
-        MWRF(&p->pts[(p->npts-1)*2+1], y)
+        //MWRF(&p->pts[(p->npts-1)*2+0], x)
+        //MWRF(&p->pts[(p->npts-1)*2+1], y)
+        p->pts[(p->npts-1)*2+0] = x;
+		p->pts[(p->npts-1)*2+1] = y;
 	} else {
 		nsvg__addPoint(p, x, y);
 	}
@@ -739,8 +764,10 @@ static void nsvg__lineTo(NSVGparser* p, float x, float y)
 {
 	float px,py, dx,dy, ftmp;
 	if (p->npts > 0) {
-        MWRF(&px, MRDF(&p->pts[(p->npts-1)*2+0], &ftmp))
-        MWRF(&py, MRDF(&p->pts[(p->npts-1)*2+1], &ftmp))
+        //MWRF(&px, MRDF(&p->pts[(p->npts-1)*2+0], &ftmp))
+        //MWRF(&py, MRDF(&p->pts[(p->npts-1)*2+1], &ftmp))
+        px = p->pts[(p->npts-1)*2+0];
+		py = p->pts[(p->npts-1)*2+1];
 		dx = x - px;
 		dy = y - py;
 		nsvg__addPoint(p, px + dx/3.0f, py + dy/3.0f);
@@ -940,7 +967,8 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 		return;
 
 	if (MRDC(&closed, &tmp))
-		nsvg__lineTo(p, MRDF(&p->pts[0], &ftmp), MRDF(&p->pts[1], &ftmp));
+        nsvg__lineTo(p, p->pts[0], p->pts[1]);
+		//nsvg__lineTo(p, MRDF(&p->pts[0], &ftmp), MRDF(&p->pts[1], &ftmp));
 
 	path = (NSVGpath*)malloc(sizeof(NSVGpath));
 
@@ -959,7 +987,8 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 	
 	// Transform path.
 	for (i = 0; i < p->npts; ++i)
-		nsvg__xformPoint(&path->pts[i*2], &path->pts[i*2+1], MRDF(&p->pts[i*2], &ftmp), MRDF(&p->pts[i*2+1], &ftmp), attr->xform);
+  		nsvg__xformPoint(&path->pts[i*2], &path->pts[i*2+1], p->pts[i*2], p->pts[i*2+1], attr->xform);
+		//nsvg__xformPoint(&path->pts[i*2], &path->pts[i*2+1], MRDF(&p->pts[i*2], &ftmp), MRDF(&p->pts[i*2+1], &ftmp), attr->xform);
 	
 	// Find bounds
 	for (i = 0; i < path->npts-1; i += 3) {
@@ -2160,8 +2189,10 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 					// Commit path.
 					if (p->npts > 0) {
 						// Move current point to first point
-                        MWRF(&cpx, MRDF(&p->pts[0], &ftmp));
-                        MWRF(&cpy, MRDF(&p->pts[1], &ftmp));
+                        cpx = p->pts[0];
+						cpy = p->pts[1];
+                        //MWRF(&cpx, MRDF(&p->pts[0], &ftmp));
+                        //MWRF(&cpy, MRDF(&p->pts[1], &ftmp));
 						cpx2 = cpx; cpy2 = cpy;
 						nsvg__addPath(p, closedFlag);
 					}

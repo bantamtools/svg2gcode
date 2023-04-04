@@ -201,6 +201,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
   FILE *f;
   int i,j,k,l,p,b,bezCount;
   SVGPoint* pts;
+  float ftmp[8];
 #ifdef DO_HPGL 
   f=fopen("test.hpgl","w");
   fprintf(f,"IN;SP1;");
@@ -218,13 +219,14 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
         float *pp = &path->pts[j*2];
         if(j==0) {//add first two points. this is for lines and not bezier paths.
-        points[i].x = pp[0];
-        points[i].y = pp[1];
+        MWRF(&points[i].x, MRDF(&pp[0], &ftmp[0]));
+        MWRF(&points[i].y, MRDF(&pp[1], &ftmp[1]));
+
 #ifdef DO_HPGL
-        fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
+        fprintf(f,"PU%d,%d;",(int)(MRDF(&pp[0], &ftmp[0])),(int)(MRDF(&pp[1], &ftmp[1])));
         fflush(f);
 	      } else {
-        fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
+        fprintf(f,"PD%d,%d;",(int)(MRDF(&pp[0], &ftmp[0])),(int)(MRDF(&pp[1], &ftmp[1])));
         fflush(f);
 #endif
 	      }
@@ -232,13 +234,13 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
           bezCount++;
           //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
           for(b=0;b<8;b++){
-            paths[k].points[b]=pp[b];
+            MWRF(&paths[k].points[b], MRDF(&pp[b], &ftmp[b]));
           }
         } else {
-          paths[k].points[0] = pp[0];
-          paths[k].points[1] = pp[1];
-          paths[k].points[2] = pp[0];
-          paths[k].points[3] = pp[1];
+          MWRF(&paths[k].points[0], MRDF(&pp[0], &ftmp[0]));
+          MWRF(&paths[k].points[1], MRDF(&pp[1], &ftmp[1]));
+          MWRF(&paths[k].points[2], MRDF(&pp[0], &ftmp[2]));
+          MWRF(&paths[k].points[3], MRDF(&pp[1], &ftmp[3]));
         }
         paths[k].closed = path->closed;
         paths[k].city = i; //assign points in this path/shape to city i.
@@ -340,6 +342,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
   struct NSVGpath* path;
   int i;
   int colorMatch = 0;
+  float ftmp;
   bounds[0] = FLT_MAX;
   bounds[1] = FLT_MAX;
   bounds[2] = -FLT_MAX;
@@ -351,11 +354,11 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
     for (path = shape->paths; path != NULL; path = path->next) { //for all path's in a shape. Path's inherit their shape color.
       for (i = 0; i < path->npts-1; i++) { //for all points in a path.
         float* p = &path->pts[i*2];
-        bounds[0] = minf(bounds[0], p[0]);
-        bounds[1] = minf(bounds[1], p[1]);
-        bounds[2] = maxf(bounds[2], p[0]);
-        bounds[3] = maxf(bounds[3], p[1]);
-	      pointsCount++;
+        bounds[0] = minf(bounds[0], MRDF(&p[0], &ftmp));
+        bounds[1] = minf(bounds[1], MRDF(&p[1], &ftmp));
+        bounds[2] = maxf(bounds[2], MRDF(&p[0], &ftmp));
+        bounds[3] = maxf(bounds[3], MRDF(&p[1], &ftmp));
+        pointsCount++;
       }
       pathCount++;
           }
@@ -589,15 +592,22 @@ int generateGcode(int argc, char* argv[]) {
       break;
     }
   }
+
+  zFloor = 3.0;
+  ztraverse = zFloor+3.; //dynamicize machine dimensions in z.
+  fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
+  fitToMaterial = 1.0;
+  int svg_idx = 5;
+  int gcode_idx = 6;
   
   
   //move above to main
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
 
-  g_image = nsvgParseFromFile(argv[optind],"px",96);
+  g_image = nsvgParseFromFile(argv[svg_idx],"px",96);
   if(g_image == NULL) {
-    printf("error: Can't open input %s\n",argv[optind]);
+    printf("error: Can't open input %s\n",argv[svg_idx]);
     return -1;
   }
 
@@ -681,9 +691,9 @@ seedrand((float)time(0));
 #endif
 
  if(append){ 
-  gcode = fopen(argv[optind+1],"a");
+  gcode = fopen(argv[gcode_idx],"a");
  } else {
-  gcode=fopen(argv[optind+1],"w");
+  gcode=fopen(argv[gcode_idx],"w");
  }
  if(gcode == NULL) {
    printf("can't open output %s\n",argv[optind+1]);
