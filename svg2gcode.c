@@ -242,8 +242,9 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
           MWRF(&paths[k].points[2], MRDF(&pp[0], &ftmp[2]));
           MWRF(&paths[k].points[3], MRDF(&pp[1], &ftmp[3]));
         }
-        paths[k].closed = path->closed;
-        paths[k].city = i; //assign points in this path/shape to city i.
+        MWRC(&paths[k].closed, path->closed);
+        MWRI(&paths[k].city, i); //assign points in this path/shape to city i.
+
         k++;
        }
      cont:       
@@ -397,6 +398,7 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
   float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
+  float ftmp[8];
   for(i=0;i<800*pathCount;i++) {
     indexA = (int)(RANDOM()*(pathCount-2));
     indexB = (int)(RANDOM()*(pathCount-2));
@@ -408,10 +410,14 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
       indexB = indexA;
       indexA = temp1;
     }
-    pn1 = pts[cities[indexA].id];
-    pn2 = pts[cities[indexA+1].id];
-    pn3 = pts[cities[indexB].id];
-    pn4 = pts[cities[indexB+1].id];
+    MWRF(&pn1.x, MRDF(&pts[cities[indexA].id].x, &ftmp[0]));
+    MWRF(&pn1.y, MRDF(&pts[cities[indexA].id].y, &ftmp[1]));
+    MWRF(&pn2.x, MRDF(&pts[cities[indexA+1].id].x, &ftmp[2]));
+    MWRF(&pn2.y, MRDF(&pts[cities[indexA+1].id].y, &ftmp[3]));
+    MWRF(&pn3.x, MRDF(&pts[cities[indexB].id].x, &ftmp[4]));
+    MWRF(&pn3.y, MRDF(&pts[cities[indexB].id].y, &ftmp[5]));
+    MWRF(&pn4.x, MRDF(&pts[cities[indexB+1].id].x, &ftmp[6]));
+    MWRF(&pn4.y, MRDF(&pts[cities[indexB+1].id].y, &ftmp[7]));
     dnx = pn1.x-pn2.x;
     dny = pn1.y-pn2.y;
     if(xy) {
@@ -535,6 +541,9 @@ int generateGcode(int argc, char* argv[]) {
   int ch;
   int dwell = -1;
   char gbuff[128];
+  char ctmp;
+  int itmp;
+  float ftmp[8];
   printf("v0.0001 8.11.2020\n");
   //seed48(NULL);
 
@@ -544,7 +553,7 @@ int generateGcode(int argc, char* argv[]) {
     help();
     return -1;
   }
-
+/*
   while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
     switch(ch) {
     case 'P': pwr = atoi(optarg);
@@ -592,7 +601,7 @@ int generateGcode(int argc, char* argv[]) {
       break;
     }
   }
-
+*/
   zFloor = 3.0;
   ztraverse = zFloor+3.; //dynamicize machine dimensions in z.
   fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
@@ -701,11 +710,18 @@ seedrand((float)time(0));
  }
   printf("paths %d points %d\n",pathCount, pointsCount);
   // allocate memory
+#ifdef USE_MEMUTIL
+  points = (SVGPoint*)memutil_swap_malloc(pathCount*sizeof(SVGPoint));
+  paths = (ToolPath*)memutil_swap_malloc(pointsCount*sizeof(ToolPath));
+  memutil_swap_memset(points, 0, pathCount*sizeof(SVGPoint));
+  memutil_swap_memset(paths, 0, pointsCount*sizeof(ToolPath));
+#else
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   paths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
-  cities = (City*)malloc(pathCount*sizeof(City));
   memset(points, 0, pathCount*sizeof(SVGPoint));
   memset(paths, 0, pointsCount*sizeof(ToolPath));
+#endif
+  cities = (City*)malloc(pathCount*sizeof(City));
   memset(cities, 0, pathCount*sizeof(City));
 
   printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
@@ -730,6 +746,11 @@ seedrand((float)time(0));
   //   printf("City %d at i:%d, Color:%d\n", cities[i].id, i, cities[i].stroke.color);
   // }
 
+//TEMP
+  char *debug_name = "/sdcard/debug.log";
+  FILE* debug_file=fopen(debug_name,"w");
+//TEMP
+
   printf("\n");
   if(first) {
     fprintf(gcode,GHEADER,pwr);
@@ -742,17 +763,19 @@ seedrand((float)time(0));
     cityStart=1;
     for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
                             //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
-      if(paths[k].city == -1){ //means already written
-	      continue;
-      } else if(paths[k].city == cities[i].id) {
+      if (MRDI(&paths[k].city, &itmp) == -1) {  //means already written
+          continue;
+      } else if(MRDI(&paths[k].city, &itmp) == cities[i].id) {
         break;
       }
     }
     if(k >= npaths-1) {
       continue;
     }
-    firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
-    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
+    ftmp[0] = MRDF(&paths[k].points[0], &ftmp[0]);
+    ftmp[1] = MRDF(&paths[k].points[1], &ftmp[1]);
+    firstx = x = (ftmp[0]+zeroX)*scale+shiftX;
+    firsty = y =  (ftmp[1]+zeroY)*scale+shiftY;
     if(flip) {
       firsty = -firsty;
       y = -y;
@@ -822,10 +845,10 @@ seedrand((float)time(0));
       xold = x;
       yold = y;
       first = 1;
-      if(paths[j].city == cities[i].id) {
+      if(MRDI(&paths[j].city, &itmp) == cities[i].id) {
         bezCount = 0;
-          //if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3]) ;continue;
-        cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
+        cubicBez(MRDF(&paths[j].points[0], &ftmp[0]), MRDF(&paths[j].points[1], &ftmp[1]), MRDF(&paths[j].points[2], &ftmp[2]), MRDF(&paths[j].points[3], &ftmp[3]), \
+                 MRDF(&paths[j].points[4], &ftmp[4]), MRDF(&paths[j].points[5], &ftmp[5]), MRDF(&paths[j].points[6], &ftmp[6]), MRDF(&paths[j].points[7], &ftmp[7]), tol, 0);
         bxold=x;
         byold=y;
         for(l=0;l<bezCount;l++) {
@@ -865,17 +888,18 @@ seedrand((float)time(0));
           bxold = bx;
           byold = by;
         }
-      paths[j].city = -1; //this path has been written
+      MWRI(&paths[j].city, -1);
       } else
 	        break;
     }
-    if(paths[j].closed) {
+    if(MRDC(&paths[j].closed, &ctmp)) {
       fprintf(gcode, "( end )\n");
       fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
       printed = 1;
     }
   }
+
   fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
   //drop off current tool
   fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
@@ -885,8 +909,16 @@ seedrand((float)time(0));
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
+//TEMP
+  fclose(debug_file);
+//TEMP
+#ifdef USE_MEMUTIL
+  memutil_swap_free(points);
+  memutil_swap_free(paths);
+#else
   free(points);
   free(paths);
+#endif
   free(cities);
   nsvgDelete(g_image);
   free(penList);

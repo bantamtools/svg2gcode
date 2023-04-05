@@ -79,28 +79,45 @@ extern "C" {
 #ifdef USE_MEMUTIL
 #define MWR(x, y)           memutil_swap_write_char((void*)&x, (uint8_t)y);
 #define MWRP(x, y)          memutil_swap_write_byte(x++, (uint8_t)y);
-#define MWRF(x, y)          memutil_swap_write_float((void*)x, y);
-#define MWRFP(x, y)          memutil_swap_write_float((void*)&x, y);
-
 #define MRDC(x, y)          memutil_swap_read_char((void*)x, y)
 #define MRDS(x, y)          memutil_swap_read_string((void*)x, y, sizeof(y))  // NOTE: Do NOT use strlen!
+
+//TESTING
+#define MWRC(x, y)          memutil_swap_write_char((void*)x, y);
+#define MWRI(x, y)          memutil_swap_write_int((void*)x, y);
+#define MWRF(x, y)          memutil_swap_write_float((void*)x, y);
+#define MWRFP(x, y)         memutil_swap_write_float((void*)&x, y);
+
 #ifdef MEMUTIL_DEBUG
+#define MRDI(x, y)          int_check(memutil_swap_read_int((void*)x, y))
 #define MRDF(x, y)          float_check(memutil_swap_read_float((void*)x, y))
 #else
+#define MRDI(x, y)          memutil_swap_read_int((void*)x, y)
 #define MRDF(x, y)          memutil_swap_read_float((void*)x, y)
 #endif
+//TESTING
+
 #else
 #define MWR(x, y)           x = y;
 #define MWRP(x, y)          *x++ = y;
 #define MRDC(x, y)          *x
 #define MRDS(x, y)          x
-#ifdef MEMUTIL_DEBUG
-#define MRDF(x, y)          float_check(*x)
-#else
-#define MRDF(x, y)          *x
-#endif
+
+//TESTING
+#define MWRC(x, y)          *x = y;
+#define MWRI(x, y)          *x = y;
 #define MWRF(x, y)          *x = y;
 #define MWRFP(x, y)         x = y;
+
+#ifdef MEMUTIL_DEBUG
+#define MRDI(x, y)          int_check(*x)\
+#define MRDF(x, y)          float_check(*x)
+#else
+#define MRDI(x, y)          *x
+#define MRDF(x, y)          *x
+#endif
+//TESTING
+
 #endif
 
 #define NSVG_PAINT_NONE 0
@@ -207,6 +224,12 @@ void nsvgDelete(NSVGimage* image);
 #endif
 
 #ifdef MEMUTIL_DEBUG
+// DEBUG: Check integers from swap / internal memory
+int int_check(int n) {
+    printf("I -> %d\r\n", n);
+    return n;
+}
+
 // DEBUG: Check floats from swap / internal memory
 float float_check(float f) {
     if (isnan(f)) {
