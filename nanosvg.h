@@ -77,7 +77,6 @@ extern "C" {
 //#define MEMUTIL_DEBUG
 //#define MEMUTIL_DEBUG_VERBOSE
 #ifdef USE_MEMUTIL
-#define MWR(x, y)           memutil_swap_write_char((void*)&x, (uint8_t)y);
 #define MWRP(x, y)          memutil_swap_write_byte(x++, (uint8_t)y);
 #define MRDC(x, y)          memutil_swap_read_char((void*)x, y)
 #define MRDS(x, y)          memutil_swap_read_string((void*)x, y, sizeof(y))  // NOTE: Do NOT use strlen!
@@ -98,7 +97,6 @@ extern "C" {
 //TESTING
 
 #else
-#define MWR(x, y)           x = y;
 #define MWRP(x, y)          *x++ = y;
 #define MRDC(x, y)          *x
 #define MRDS(x, y)          x
@@ -301,7 +299,7 @@ static void nsvg__parseElement(char* s,
     printf("%s\r\n", __func__);
 #endif
 
-	// Skip white space after the '<'
+    // Skip white space after the '<'
 	while (MRDC(s, &tmp) && nsvg__isspace(MRDC(s, &tmp))) s++;
 
 	// Check if the tag is end tag
@@ -1050,7 +1048,7 @@ static const char* nsvg__getNextPathItem(const char* s, char* it)
 {
 	int i = 0;
     char tmp;
-	MWR(it[0], '\0');
+	MWRC(&it[0], '\0');
 
 
 	// Skip white spaces and commas
@@ -1059,44 +1057,44 @@ static const char* nsvg__getNextPathItem(const char* s, char* it)
 	if (MRDC(s, &tmp) == '-' || MRDC(s, &tmp) == '+' || nsvg__isdigit(MRDC(s, &tmp))) {
 		// sign
 		if (MRDC(s, &tmp) == '-' || MRDC(s, &tmp) == '+') {
-			if (i < 63) MWR(it[i++], MRDC(s, &tmp));
+			if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
 			s++;
 		}
 		// integer part
 		while (MRDC(s, &tmp) && nsvg__isdigit(MRDC(s, &tmp))) {
-			if (i < 63) MWR(it[i++], MRDC(s, &tmp));
+			if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
 			s++;
 		}
 		if (MRDC(s, &tmp) == '.') {
 			// decimal point
-			if (i < 63) MWR(it[i++], MRDC(s, &tmp));
+			if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
 			s++;
 			// fraction part
 			while (MRDC(s, &tmp) && nsvg__isdigit(MRDC(s, &tmp))) {
-				if (i < 63) MWR(it[i++], MRDC(s, &tmp));
+				if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
 				s++;
 			}
 		}
 		// exponent
 		if (MRDC(s, &tmp) == 'e' || MRDC(s, &tmp) == 'E') {
-			if (i < 63) MWR(it[i++], MRDC(s, &tmp));
+			if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
 			s++;
 			if (MRDC(s, &tmp) == '-' || MRDC(s, &tmp) == '+') {
-				if (i < 63) MWR(it[i++], MRDC(s, &tmp));
+				if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
 				s++;
 			}
 			while (MRDC(s, &tmp) && nsvg__isdigit(MRDC(s, &tmp))) {
-				if (i < 63) MWR(it[i++], MRDC(s, &tmp));
+				if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
 				s++;
 			}
 		}
-		MWR(it[i], '\0');
+		MWRC(&it[i], '\0');
 	} else {
 		// Parse command
         tmp = MRDC(s, &tmp);
-		MWR(it[0], tmp);
+		MWRC(&it[0], tmp);
         s++;
-		MWR(it[1], '\0');
+		MWRC(&it[1], '\0');
 		return s;
 	}
 
@@ -1147,7 +1145,7 @@ static unsigned int nsvg__parseColorHex(const char* str)
 		sscanf(MRDS(str, tmp_buf), "%x", &c);
 	} else if (n == 3) {
 		sscanf(MRDS(str, tmp_buf), "%x", &c);
-		c = (c&0xf) | ((c&0xf0) << 4) | ((c&0xf00) << 8);
+        c = (c&0xf) | ((c&0xf0) << 4) | ((c&0xf00) << 8);
 		c |= c<<4;
 	}
 	r = (c >> 16) & 0xff;
@@ -1614,10 +1612,10 @@ static void nsvg__parseUrl(char* id, const char* str)
 	if (MRDC(str, &tmp) == '#')
 		str++;
 	while (i < 63 && MRDC(str, &tmp) != ')') {
-        MWR(id[i], MRDC(str++, &tmp));
+        MWRC(&id[i], MRDC(str++, &tmp));
 		i++;
 	}
-    MWR(id[i], '\0');
+    MWRC(&id[i], '\0');
 }
 
 static void nsvg__parseStyle(NSVGparser* p, const char* str);
@@ -2529,11 +2527,11 @@ static void nsvg__parseGradient(NSVGparser* p, const char** attr, char type)
 			} else if (strcmp(MRDS(attr[i], tmp_buf), "xlink:href") == 0) {
                 strncpy(grad->ref, MRDS(attr[i+1], tmp_buf), 63);
                 temp = MRDC(&grad->ref[63], &temp);
-				MWR(temp, '\0');
+				MWRC(&temp, '\0');
 			} else if (strcmp(MRDS(attr[i], tmp_buf), "id") == 0) {
                 strncpy(grad->id, MRDS(attr[i+1], tmp_buf), 63);
                 temp = MRDC(&grad->id[63], &temp);
-				MWR(temp, '\0');
+				MWRC(&temp, '\0');
 			}
 		}
 	}
