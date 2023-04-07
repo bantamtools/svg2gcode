@@ -746,11 +746,6 @@ seedrand((float)time(0));
   //   printf("City %d at i:%d, Color:%d\n", cities[i].id, i, cities[i].stroke.color);
   // }
 
-//TEMP
-  char *debug_name = "/sdcard/debug.log";
-  FILE* debug_file=fopen(debug_name,"w");
-//TEMP
-
   printf("\n");
   if(first) {
     fprintf(gcode,GHEADER,pwr);
@@ -909,9 +904,6 @@ seedrand((float)time(0));
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
-//TEMP
-  fclose(debug_file);
-//TEMP
 #ifdef USE_MEMUTIL
   memutil_swap_free(points);
   memutil_swap_free(paths);

@@ -87,7 +87,7 @@ extern "C" {
 #define MWRF(x, y)          memutil_swap_write_float((void*)x, y);
 #define MWRFP(x, y)         memutil_swap_write_float((void*)&x, y);
 
-#ifdef MEMUTIL_DEBUG
+#ifdef MEMUTIL_DEBUG_VERBOSE
 #define MRDI(x, y)          int_check(memutil_swap_read_int((void*)x, y))
 #define MRDF(x, y)          float_check(memutil_swap_read_float((void*)x, y))
 #else
@@ -107,7 +107,7 @@ extern "C" {
 #define MWRF(x, y)          *x = y;
 #define MWRFP(x, y)         x = y;
 
-#ifdef MEMUTIL_DEBUG
+#ifdef MEMUTIL_DEBUG_VERBOSE
 #define MRDI(x, y)          int_check(*x)\
 #define MRDF(x, y)          float_check(*x)
 #else
@@ -221,7 +221,7 @@ void nsvgDelete(NSVGimage* image);
 	#define NSVG_INLINE inline
 #endif
 
-#ifdef MEMUTIL_DEBUG
+#ifdef MEMUTIL_DEBUG_VERBOSE
 // DEBUG: Check integers from swap / internal memory
 int int_check(int n) {
     printf("I -> %d\r\n", n);
@@ -270,7 +270,7 @@ static void nsvg__parseContent(char* s,
 {
     char tmp;
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: s -> %p\r\n", __func__, (void*)s);
 #endif
 
 	// Trim start white spaces
@@ -296,7 +296,7 @@ static void nsvg__parseElement(char* s,
     char tmp_buf[20488];
 
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: s -> %p\r\n", __func__, (void*)s);
 #endif
 
     // Skip white space after the '<'
@@ -386,7 +386,7 @@ int nsvg__parseXML(char* input,
 	int state = NSVG_XML_CONTENT;
     char tmp;
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: s -> %p, mark -> %p, input -> %p\r\n", __func__, (void*)s, (void*)mark, (void*)input);
 #endif
 
 	while (MRDC(s, &tmp)) {
@@ -569,6 +569,9 @@ static void nsvg__xformPremultiply(float* t, float* s)
 
 static void nsvg__xformPoint(float* dx, float* dy, float x, float y, float* t)
 {
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: dx -> %p, dy -> %p, x -> %p, y -> %p, t -> %p\r\n", __func__, (void*)dx, (void*)dy, (void*)&x, (void*)&y, (void*)t);
+#endif
     MWRFP(*dx, x*t[0] + y*t[2] + t[4])
     MWRFP(*dy, x*t[1] + y*t[3] + t[5])
 }
@@ -583,6 +586,9 @@ static void nsvg__xformVec(float* dx, float* dy, float x, float y, float* t)
 
 static int nsvg__ptInBounds(float* pt, float* bounds)
 {
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: pt -> %p, bounds -> %p\r\n", __func__, (void*)pt, (void*)bounds);
+#endif
     float ftmp1, ftmp2;
     return MRDF(&pt[0], &ftmp1) >= bounds[0] && MRDF(&pt[0], &ftmp1) <= bounds[2] && MRDF(&pt[1], &ftmp2) >= bounds[1] && MRDF(&pt[1], &ftmp2) <= bounds[3];
 }
@@ -605,11 +611,15 @@ static void nsvg__curveBounds(float* bounds, float* curve)
 	float* v2 = &curve[4];
 	float* v3 = &curve[6];
 
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: bounds -> %p, curve -> %p ,v0 -> %p\r\n", __func__, (void*)bounds, (void*)curve, (void*)v0);
+#endif
+
 	// Start the bounding box by end points
-    MWRF(&bounds[0], nsvg__minf(MRDF(&v0[0], &ftmp[0]), MRDF(&v3[0], &ftmp[1])));
-    MWRF(&bounds[1], nsvg__minf(MRDF(&v0[1], &ftmp[0]), MRDF(&v3[1], &ftmp[1])));
-    MWRF(&bounds[2], nsvg__maxf(MRDF(&v0[0], &ftmp[0]), MRDF(&v3[0], &ftmp[1])));
-    MWRF(&bounds[3], nsvg__maxf(MRDF(&v0[1], &ftmp[0]), MRDF(&v3[1], &ftmp[1])));
+    bounds[0] = nsvg__minf(MRDF(&v0[0], &ftmp[0]), MRDF(&v3[0], &ftmp[1]));  //noconvert bounds
+    bounds[1] = nsvg__minf(MRDF(&v0[1], &ftmp[0]), MRDF(&v3[1], &ftmp[1]));  //noconvert bounds
+    bounds[2] = nsvg__maxf(MRDF(&v0[0], &ftmp[0]), MRDF(&v3[0], &ftmp[1]));  //noconvert bounds
+    bounds[3] = nsvg__maxf(MRDF(&v0[1], &ftmp[0]), MRDF(&v3[1], &ftmp[1]));  //noconvert bounds
 
 	// Bezier curve fits inside the convex hull of it's control points.
 	// If control points are inside the bounds, we're done.
@@ -827,6 +837,10 @@ static NSVGgradientData* nsvg__findGradientData(NSVGparser* p, const char* id)
 {
     char tmp_buf[2048];
 	NSVGgradientData* grad = p->gradients;
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: id -> %p\r\n", __func__, (void*)id);
+#endif
+
 	while (grad) {
         if (strcmp(grad->id, MRDS(id, tmp_buf)) == 0)
 			return grad;
@@ -983,11 +997,14 @@ static void nsvg__addPath(NSVGparser* p, char closed)
     char tmp;
     float ftmp;
 
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: closed -> %p\r\n", __func__, (void*)&closed);
+#endif
 
 	if (p->npts < 4)
 		return;
 
-	if (MRDC(&closed, &tmp))
+	if (closed)  //noconvert
         nsvg__lineTo(p, p->pts[0], p->pts[1]);
 		//nsvg__lineTo(p, MRDF(&p->pts[0], &ftmp), MRDF(&p->pts[1], &ftmp));
 
@@ -1003,7 +1020,7 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 #endif
 
 	if (path->pts == NULL) goto error;
-	path->closed = MRDC(&closed, &path->closed);
+	path->closed = closed;  //noconvert
 	path->npts = p->npts;
 	
 	// Transform path.
@@ -1048,8 +1065,10 @@ static const char* nsvg__getNextPathItem(const char* s, char* it)
 {
 	int i = 0;
     char tmp;
-	MWRC(&it[0], '\0');
-
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: s -> %p, it -> %p\r\n", __func__, (void*)s, (void*)it);
+#endif
+	it[0] = '\0';  //noconvert
 
 	// Skip white spaces and commas
 	while (MRDC(s, &tmp) && (nsvg__isspace(MRDC(s, &tmp)) || MRDC(s, &tmp) == ',')) s++;
@@ -1057,44 +1076,44 @@ static const char* nsvg__getNextPathItem(const char* s, char* it)
 	if (MRDC(s, &tmp) == '-' || MRDC(s, &tmp) == '+' || nsvg__isdigit(MRDC(s, &tmp))) {
 		// sign
 		if (MRDC(s, &tmp) == '-' || MRDC(s, &tmp) == '+') {
-			if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
+			if (i < 63) it[i++] = MRDC(s, &tmp);  //noconvert it
 			s++;
 		}
 		// integer part
 		while (MRDC(s, &tmp) && nsvg__isdigit(MRDC(s, &tmp))) {
-			if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
+			if (i < 63) it[i++] = MRDC(s, &tmp);//noconvert it
 			s++;
 		}
 		if (MRDC(s, &tmp) == '.') {
 			// decimal point
-			if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
+			if (i < 63) it[i++] = MRDC(s, &tmp);  //noconvert it
 			s++;
 			// fraction part
 			while (MRDC(s, &tmp) && nsvg__isdigit(MRDC(s, &tmp))) {
-				if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
+				if (i < 63) it[i++] = MRDC(s, &tmp);  //noconvert it
 				s++;
 			}
 		}
 		// exponent
 		if (MRDC(s, &tmp) == 'e' || MRDC(s, &tmp) == 'E') {
-			if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
+			if (i < 63) it[i++] = MRDC(s, &tmp);  //noconvert it
 			s++;
 			if (MRDC(s, &tmp) == '-' || MRDC(s, &tmp) == '+') {
-				if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
+				if (i < 63) it[i++] = MRDC(s, &tmp);  //noconvert it
 				s++;
 			}
 			while (MRDC(s, &tmp) && nsvg__isdigit(MRDC(s, &tmp))) {
-				if (i < 63) MWRC(&it[i++], MRDC(s, &tmp));
+				if (i < 63) it[i++] = MRDC(s, &tmp);  //noconvert it
 				s++;
 			}
 		}
-		MWRC(&it[i], '\0');
+		it[i] = '\0';  //noconvert
 	} else {
 		// Parse command
         tmp = MRDC(s, &tmp);
-		MWRC(&it[0], tmp);
+		it[0] = tmp;  //noconvert
         s++;
-		MWRC(&it[1], '\0');
+		it[1] = '\0';  //noconvert
 		return s;
 	}
 
@@ -1130,7 +1149,7 @@ static float nsvg__actualLength(NSVGparser* p)
 static unsigned int nsvg__parseColorHex(const char* str)
 {
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
 	unsigned int c = 0, r = 0, g = 0, b = 0;
 	int n = 0;
@@ -1157,7 +1176,7 @@ static unsigned int nsvg__parseColorHex(const char* str)
 static unsigned int nsvg__parseColorRGB(const char* str)
 {
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
 	int r = -1, g = -1, b = -1;
 	char s1[32]="", s2[32]="";
@@ -1332,7 +1351,7 @@ NSVGNamedColor nsvg__colors[] = {
 static unsigned int nsvg__parseColorName(const char* str)
 {
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
                 int i, ncolors = sizeof(nsvg__colors) / sizeof(NSVGNamedColor);
 	char tmp_buf[2048];
@@ -1349,7 +1368,7 @@ static unsigned int nsvg__parseColorName(const char* str)
 static unsigned int nsvg__parseColor(const char* str)
 {
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
 	int len = 0;
     char tmp;
@@ -1370,23 +1389,24 @@ static float nsvg__convertToPixels(NSVGparser* p, float val, const char* units, 
 #ifdef MEMUTIL_DEBUG
     printf("%s\r\n", __func__);
 #endif
+
 	if (p != NULL) {
 		// Convert units to pixels.
-		if (MRDC(&units[0], &tmp) == '\0') {
+		if (units[0] == '\0') {  //noconvert
 			return val;
-		} else if (MRDC(&units[0], &tmp) == 'p' && MRDC(&units[1], &tmp) == 'x') {
+		} else if (units[0] == 'p' && units[1] == 'x') {  //noconvert
 			return val;
-		} else if (MRDC(&units[0], &tmp) == 'p' && MRDC(&units[1], &tmp) == 't') {
+		} else if (units[0] == 'p' && units[1] == 't') {  //noconvert
 			return val / 72.0f * p->dpi;
-		} else if (MRDC(&units[0], &tmp) == 'p' && MRDC(&units[1], &tmp) == 'c') {
+		} else if (units[0] == 'p' && units[1] == 'c') {  //noconvert
 			return val / 6.0f * p->dpi;
-		} else if (MRDC(&units[0], &tmp) == 'm' && MRDC(&units[1], &tmp) == 'm') {
+		} else if (units[0] == 'm' && units[1] == 'm') {  //noconvert
 			return val / 25.4f * p->dpi;
-		} else if (MRDC(&units[0], &tmp) == 'c' && MRDC(&units[1], &tmp) == 'm') {
+		} else if (units[0] == 'c' && units[1] == 'm') {  //noconvert
 			return val / 2.54f * p->dpi;
-		} else if (MRDC(&units[0], &tmp) == 'i' && MRDC(&units[1], &tmp) == 'n') {
+		} else if (units[0] == 'i' && units[1] == 'n') {  //noconvert
 			return val * p->dpi;
-		} else if (MRDC(&units[0], &tmp) == '%') {
+		} else if (units[0] == '%') {  //noconvert
 			if (p != NULL) {
 				attr = nsvg__getAttr(p);
 				if (dir == 0)
@@ -1398,12 +1418,12 @@ static float nsvg__convertToPixels(NSVGparser* p, float val, const char* units, 
 			} else {
 				return (val/100.0f);
 			}
-		} else if (MRDC(&units[0], &tmp) == 'e' && MRDC(&units[1], &tmp) == 'm') {
+		} else if (units[0] == 'e' && units[1] == 'm') {  //noconvert
 			if (p != NULL) {
 				attr = nsvg__getAttr(p);
 				return val * attr->fontSize;
 			}
-		} else if (MRDC(&units[0], &tmp) == 'e' && MRDC(&units[1], &tmp) == 'x') {
+		} else if (units[0] == 'e' && units[1] == 'x') {  //noconvert
 			if (p != NULL) {
 				attr = nsvg__getAttr(p);
 				return val * attr->fontSize * 0.52f; // x-height of Helvetica.
@@ -1411,11 +1431,11 @@ static float nsvg__convertToPixels(NSVGparser* p, float val, const char* units, 
 		}
 	} else {
 		// Convert units to pixels.
-		if (MRDC(&units[0], &tmp) == '\0') {
+		if (units[0] == '\0') {  //noconvert
 			return val;
-		} else if (MRDC(&units[0], &tmp) == 'p' && MRDC(&units[1], &tmp) == 'x') {
+		} else if (units[0] == 'p' && units[1] == 'x') {  //noconvert
 			return val;
-		} else if (MRDC(&units[0], &tmp) == '%') {
+		} else if (units[0] == '%') {  //noconvert
 			return (val/100.0f);
 		}
 	}
@@ -1428,7 +1448,7 @@ static float nsvg__parseFloat(NSVGparser* p, const char* str, int dir)
 	char units[32]="";
     char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
 	sscanf(MRDS(str, tmp_buf), "%f%s", &val, units);
 	return nsvg__convertToPixels(p, val, units, dir);
@@ -1441,7 +1461,7 @@ static int nsvg__parseTransformArgs(const char* str, float* args, int maxNa, int
     char tmp;
     char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: str -> %p, ptr -> %p, end -> %p\r\n", __func__, (void*)str, (void*)ptr, (void*)end);
 #endif
 	*na = 0;
 	ptr = str;
@@ -1575,7 +1595,7 @@ static void nsvg__parseTransform(float* xform, const char* str)
     char tmp;
     char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
 	nsvg__xformIdentity(xform);
 	while (MRDC(str, &tmp))
@@ -1607,7 +1627,7 @@ static void nsvg__parseUrl(char* id, const char* str)
     char tmp;
 	str += 4; // "url(";
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: id -> %p, str -> %p\r\n", __func__, (void*)id, (void*)str);
 #endif
 	if (MRDC(str, &tmp) == '#')
 		str++;
@@ -1633,6 +1653,7 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 #ifdef MEMUTIL_DEBUG
     printf("name -> %s, ", MRDS(name, tmp_buf));
     printf("value -> %s\r\n", MRDS(value, tmp_buf));
+    printf("%s, addrs: name -> %p, value -> %p\r\n", __func__, (void*)name, (void*)value); 
 #endif
 
 	if (strcmp(MRDS(name, tmp_buf), "style") == 0) {
@@ -1696,14 +1717,16 @@ static int nsvg__parseNameValue(NSVGparser* p, const char* start, const char* en
     char tmp_buf[512];
 	int n;
     char tmp;
-#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
-#endif
+
 	str = start;
 	while (str < end && MRDC(str, &tmp) != ':') ++str;
 	
 	val = str;
-	
+
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: start -> %p, end -> %p, str -> %p, val -> %p\r\n", __func__, (void*)start, (void*)end, (void*)str, (void*)val);
+#endif
+
 	// Right Trim
 	while (str > start &&  (MRDC(str, &tmp) == ':' || nsvg__isspace(MRDC(str, &tmp)))) --str;
 	++str;
@@ -1729,7 +1752,7 @@ static void nsvg__parseStyle(NSVGparser* p, const char* str)
 	const char* end;
     char tmp;
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
 	while (MRDC(str, &tmp)) {
 		// Left Trim
@@ -1751,6 +1774,9 @@ static void nsvg__parseAttribs(NSVGparser* p, const char** attr)
 {
 	int i;
     char tmp_buf[2048];
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
+#endif
 	for (i = 0; ((MRDS(attr[i], tmp_buf))); i += 2)
 	{
 		if (strcmp(MRDS(attr[i], tmp_buf), "style") == 0)
@@ -1762,8 +1788,11 @@ static void nsvg__parseAttribs(NSVGparser* p, const char** attr)
 
 static int nsvg__getArgsPerElement(char cmd)
 {
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: cmd -> %p\r\n", __func__, (void*)&cmd);
+#endif
     char tmp;
-	switch (MRDC(&cmd, &tmp)) {
+	switch (cmd) {  //noconvert
 		case 'v':
 		case 'V':
 		case 'h':
@@ -2111,7 +2140,7 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
     char tmp;
     char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
 	for (i = 0; MRDS(attr[i], tmp_buf); i += 2) {
 		if (strcmp(MRDS(attr[i], tmp_buf), "d") == 0) {
@@ -2133,55 +2162,55 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 		
 		while (MRDC(s, &tmp)) {
 			s = nsvg__getNextPathItem(s, item);
-			if (!MRDC(item, &tmp)) break;
-			if (nsvg__isnum(MRDC(item, &tmp))) {
+			if (!item) break;  //noconvert
+			if (nsvg__isnum(item[0])) {  //noconvert
 				if (nargs < 10)
-					args[nargs++] = (float)atof(MRDS(item, tmp_buf));
+					args[nargs++] = (float)atof(item);  //noconvert
 				if (nargs >= rargs) {
-					switch (MRDC(&cmd, &tmp)) {
+					switch (cmd) {  //noconvert
 						case 'm':
 						case 'M':
-							nsvg__pathMoveTo(p, &cpx, &cpy, args, MRDC(&cmd, &tmp) == 'm' ? 1 : 0);
+							nsvg__pathMoveTo(p, &cpx, &cpy, args, cmd == 'm' ? 1 : 0);  //noconvert
 							// Moveto can be followed by multiple coordinate pairs,
 							// which should be treated as linetos.
-							cmd = (MRDC(&cmd, &tmp) == 'm') ? 'l' : 'L';
-                            rargs = nsvg__getArgsPerElement(MRDC(&cmd, &tmp));
+							cmd = (cmd == 'm') ? 'l' : 'L';  //noconvert
+                            rargs = nsvg__getArgsPerElement(cmd);  //noconvert
                             cpx2 = cpx; cpy2 = cpy;
 							break;
 						case 'l':
 						case 'L':
-							nsvg__pathLineTo(p, &cpx, &cpy, args, MRDC(&cmd, &tmp) == 'l' ? 1 : 0);
+							nsvg__pathLineTo(p, &cpx, &cpy, args, cmd == 'l' ? 1 : 0);  //noconvert
                             cpx2 = cpx; cpy2 = cpy;
 							break;
 						case 'H':
 						case 'h':
-							nsvg__pathHLineTo(p, &cpx, &cpy, args, MRDC(&cmd, &tmp) == 'h' ? 1 : 0);
+							nsvg__pathHLineTo(p, &cpx, &cpy, args, cmd == 'h' ? 1 : 0);  //noconvert
                             cpx2 = cpx; cpy2 = cpy;
 							break;
 						case 'V':
 						case 'v':
-							nsvg__pathVLineTo(p, &cpx, &cpy, args, MRDC(&cmd, &tmp) == 'v' ? 1 : 0);
+							nsvg__pathVLineTo(p, &cpx, &cpy, args, cmd == 'v' ? 1 : 0);  //noconvert
                             cpx2 = cpx; cpy2 = cpy;
 							break;
 						case 'C':
 						case 'c':
-							nsvg__pathCubicBezTo(p, &cpx, &cpy, &cpx2, &cpy2, args, MRDC(&cmd, &tmp) == 'c' ? 1 : 0);
+							nsvg__pathCubicBezTo(p, &cpx, &cpy, &cpx2, &cpy2, args, cmd == 'c' ? 1 : 0);  //noconvert
 							break;
 						case 'S':
 						case 's':
-							nsvg__pathCubicBezShortTo(p, &cpx, &cpy, &cpx2, &cpy2, args, MRDC(&cmd, &tmp) == 's' ? 1 : 0);
+							nsvg__pathCubicBezShortTo(p, &cpx, &cpy, &cpx2, &cpy2, args, cmd == 's' ? 1 : 0);  //noconvert
 							break;
 						case 'Q':
 						case 'q':
-							nsvg__pathQuadBezTo(p, &cpx, &cpy, &cpx2, &cpy2, args, MRDC(&cmd, &tmp) == 'q' ? 1 : 0);
+							nsvg__pathQuadBezTo(p, &cpx, &cpy, &cpx2, &cpy2, args, cmd == 'q' ? 1 : 0);  //noconvert
 							break;
 						case 'T':
 						case 't':
-							nsvg__pathQuadBezShortTo(p, &cpx, &cpy, &cpx2, &cpy2, args, MRDC(&cmd, &tmp) == 's' ? 1 : 0);
+							nsvg__pathQuadBezShortTo(p, &cpx, &cpy, &cpx2, &cpy2, args, cmd == 's' ? 1 : 0);  //noconvert
 							break;
 						case 'A':
 						case 'a':
-							nsvg__pathArcTo(p, &cpx, &cpy, args, MRDC(&cmd, &tmp) == 'a' ? 1 : 0);
+							nsvg__pathArcTo(p, &cpx, &cpy, args, cmd == 'a' ? 1 : 0);  //noconvert
                             cpx2 = cpx; cpy2 = cpy;
 							break;
 						default:
@@ -2195,9 +2224,9 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 					nargs = 0;
 				}
 			} else {
-				cmd = MRDC(&item[0], &tmp);
-				rargs = nsvg__getArgsPerElement(MRDC(&cmd, &tmp));
-				if (MRDC(&cmd, &tmp) == 'M' || MRDC(&cmd, &tmp) == 'm') {
+				cmd = item[0];  //noconvert
+				rargs = nsvg__getArgsPerElement(cmd);  //noconvert
+				if (cmd == 'M' || cmd == 'm') {  //noconvert
 					// Commit path.
 					if (p->npts > 0)
 						nsvg__addPath(p, closedFlag);
@@ -2205,7 +2234,7 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 					nsvg__resetPath(p);
 					closedFlag = 0;
 					nargs = 0;
-				} else if (MRDC(&cmd, &tmp) == 'Z' || MRDC(&cmd, &tmp) == 'z') {
+				} else if (cmd == 'Z' || cmd == 'z') {  //noconvert
 					closedFlag = 1;
 					// Commit path.
 					if (p->npts > 0) {
@@ -2243,8 +2272,8 @@ static void nsvg__parseRect(NSVGparser* p, const char** attr)
 	float ry = -1.0f;
 	int i;
     char tmp_buf[2048];
-	#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
 	for (i = 0; MRDS(attr[i], tmp_buf); i += 2) {
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
@@ -2298,8 +2327,8 @@ static void nsvg__parseCircle(NSVGparser* p, const char** attr)
 	float r = 0.0f;
 	int i;
     char tmp_buf[2048];
-	#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
 	for (i = 0; MRDS(attr[i], tmp_buf); i += 2) {
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
@@ -2332,8 +2361,8 @@ static void nsvg__parseEllipse(NSVGparser* p, const char** attr)
 	float ry = 0.0f;
 	int i;
     char tmp_buf[2048];
-	#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
 	for (i = 0; MRDS(attr[i], tmp_buf); i += 2) {
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
@@ -2368,8 +2397,8 @@ static void nsvg__parseLine(NSVGparser* p, const char** attr)
 	float y2 = 0.0;
 	int i;
     char tmp_buf[2048];
-	#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
 	for (i = 0; MRDS(attr[i], tmp_buf); i += 2) {
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
@@ -2399,8 +2428,8 @@ static void nsvg__parsePoly(NSVGparser* p, const char** attr, int closeFlag)
 	char item[64];
     char tmp;
     char tmp_buf[2048];
-	#ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
 	nsvg__resetPath(p);
 	    printf("%s\r\n", __func__);
@@ -2434,8 +2463,8 @@ static void nsvg__parseSVG(NSVGparser* p, const char** attr)
 {
 	int i;
     char tmp_buf[2048];
-    #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
 	for (i = 0; MRDS(attr[i], tmp_buf); i += 2) {
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
@@ -2484,7 +2513,7 @@ static void nsvg__parseGradient(NSVGparser* p, const char** attr, char type)
 	if (grad == NULL) return;
 	memset(grad, 0, sizeof(NSVGgradientData));
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: attr[0] -> %p, type -> %p\r\n", __func__, (void*)attr[0], (void*)&type);
 #endif
 	grad->type = MRDC(&type, &tmp);
 	nsvg__xformIdentity(grad->xform);
@@ -2548,7 +2577,7 @@ static void nsvg__parseGradientStop(NSVGparser* p, const char** attr)
 	int i, idx;
     char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
 	curAttr->stopOffset = 0;
 	curAttr->stopColor = 0;
@@ -2590,7 +2619,7 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
     char tmp_buf[2048];
 	NSVGparser* p = (NSVGparser*)ud;
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: el -> %p, attr[0] -> %p\r\n", __func__, (void*)el, (void*)attr[0]);
 #endif
 
 #ifdef MEMUTIL_DEBUG
@@ -2660,7 +2689,7 @@ static void nsvg__endElement(void* ud, const char* el)
 	NSVGparser* p = (NSVGparser*)ud;
     char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
-    printf("%s\r\n", __func__);
+    printf("%s, addrs: el -> %p\r\n", __func__, (void*)el);
 #endif
 	if (strcmp(MRDS(el, tmp_buf), "g") == 0) {
 		nsvg__popAttr(p);
@@ -2723,6 +2752,10 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 	int i;
 	float* pt;
     float ftmp;
+
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: units -> %p\r\n", __func__, (void*)units);
+#endif
 
 	// Guess image size if not set completely.
 	nsvg__imageBounds(p, bounds);
