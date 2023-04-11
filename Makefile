@@ -1,7 +1,6 @@
 CC = clang
 GCC = clang
-CFLAGS = -Ofast -v -mlongcalls
-
+CFLAGS = -Ofast -v
 all: release
 
 tool: svg2gcode
