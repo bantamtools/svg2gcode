@@ -52,6 +52,7 @@
 #define CUTTEROFF "M5\n" // same for this
 #define GFOOTER "M5\nM30\n "
 #define GMODE "M4\n"
+//#define SVG2GCODE_DEBUG
 
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
@@ -196,6 +197,7 @@ static int pcomp(const void* a, const void* b) {
 
 // get all paths and paths into cities
 static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *cities) {
+    
   struct NSVGshape* shape;
   struct NSVGpath* path;
   FILE *f;
@@ -205,6 +207,9 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
 #ifdef DO_HPGL 
   f=fopen("test.hpgl","w");
   fprintf(f,"IN;SP1;");
+#endif
+#ifdef SVG2GCODE_DEBUG
+  printf("%s, addrs: points -> %p, paths -> %p, npaths -> %p, cities -> %p\r\n", __func__, (void*)points, (void*)paths, (void*)npaths, (void*)cities);
 #endif
   bezCount=0;
   i=0;
@@ -218,7 +223,13 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
       //printf("City number %d color = %d\n", i, (shape->stroke.color));
       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
         float *pp = &path->pts[j*2];
+#ifdef SVG2GCODE_DEBUG
+        printf("addrs: path -> %p, shape -> %p, pp -> %p\r\n", (void*)path, (void*)shape, (void*)pp);
+#endif
         if(j==0) {//add first two points. this is for lines and not bezier paths.
+#ifdef SVG2GCODE_DEBUG
+        printf("addrs: points[%d].x -> %p, pp[0] -> %p, points[%d].y -> %p, pp[1] -> %p\r\n", i, (void*)&points[i].x, (void*)&pp[0], i, (void*)&points[i].y, (void*)&pp[1]);
+#endif
         MWRF(&points[i].x, MRDF(&pp[0], &ftmp[0]));
         MWRF(&points[i].y, MRDF(&pp[1], &ftmp[1]));
 
@@ -234,14 +245,26 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
           bezCount++;
           //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
           for(b=0;b<8;b++){
+#ifdef SVG2GCODE_DEBUG
+            printf("addrs: paths[%d].points[%d] -> %p, pp[%d] -> %p\r\n", k, b, (void*)&paths[k].points[b], b, (void*)&pp[b]);
+#endif
             MWRF(&paths[k].points[b], MRDF(&pp[b], &ftmp[b]));
           }
         } else {
+#ifdef SVG2GCODE_DEBUG
+          printf("addrs: paths[%d].points[0] -> %p, pp[0] -> %p\r\n", k, (void*)&paths[k].points[0], (void*)&pp[0]);
+          printf("addrs: paths[%d].points[1] -> %p, pp[1] -> %p\r\n", k, (void*)&paths[k].points[1], (void*)&pp[1]);
+          printf("addrs: paths[%d].points[2] -> %p, pp[0] -> %p\r\n", k, (void*)&paths[k].points[2], (void*)&pp[0]);
+          printf("addrs: paths[%d].points[3] -> %p, pp[1] -> %p\r\n", k, (void*)&paths[k].points[3], (void*)&pp[1]);
+#endif
           MWRF(&paths[k].points[0], MRDF(&pp[0], &ftmp[0]));
           MWRF(&paths[k].points[1], MRDF(&pp[1], &ftmp[1]));
           MWRF(&paths[k].points[2], MRDF(&pp[0], &ftmp[2]));
           MWRF(&paths[k].points[3], MRDF(&pp[1], &ftmp[3]));
         }
+#ifdef SVG2GCODE_DEBUG
+        printf("addrs: paths[%d].closed -> %p, paths[%d].city -> %p\r\n", k, (void*)&paths[k].closed, k, (void*)&paths[k].city);
+#endif
         MWRC(&paths[k].closed, path->closed);
         MWRI(&paths[k].city, i); //assign points in this path/shape to city i.
 
@@ -355,6 +378,9 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
     for (path = shape->paths; path != NULL; path = path->next) { //for all path's in a shape. Path's inherit their shape color.
       for (i = 0; i < path->npts-1; i++) { //for all points in a path.
         float* p = &path->pts[i*2];
+#ifdef SVG2GCODE_DEBUG
+        printf("addrs: p[0]-> %p, p[1] -> %p\r\n", (void*)&p[0], (void*)&p[1]);
+#endif
         bounds[0] = minf(bounds[0], MRDF(&p[0], &ftmp));
         bounds[1] = minf(bounds[1], MRDF(&p[1], &ftmp));
         bounds[2] = maxf(bounds[2], MRDF(&p[0], &ftmp));
@@ -410,6 +436,16 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
       indexB = indexA;
       indexA = temp1;
     }
+#ifdef SVG2GCODE_DEBUG
+    printf("addrs: pn1.x -> %p, pts[cities[indexA].id].x -> %p\r\n", (void*)&pn1.x, (void*)&pts[cities[indexA].id].x);
+    printf("addrs: pn1.y -> %p, pts[cities[indexA].id].y -> %p\r\n", (void*)&pn1.y, (void*)&pts[cities[indexA].id].y);
+    printf("addrs: pn2.x -> %p, pts[cities[indexA+1].id].x -> %p\r\n", (void*)&pn2.x, (void*)&pts[cities[indexA+1].id].x);
+    printf("addrs: pn2.y -> %p, pts[cities[index+1].id].y -> %p\r\n", (void*)&pn2.y, (void*)&pts[cities[indexA+1].id].y);
+    printf("addrs: pn3.x -> %p, pts[cities[indexB].id].x -> %p\r\n", (void*)&pn3.x, (void*)&pts[cities[indexB].id].x);
+    printf("addrs: pn3.y -> %p, pts[cities[indexB].id].y -> %p\r\n", (void*)&pn3.y, (void*)&pts[cities[indexB].id].y);
+    printf("addrs: pn4.x -> %p, pts[cities[indexB+1].id].x -> %p\r\n", (void*)&pn4.x, (void*)&pts[cities[indexB+1].id].x);
+    printf("addrs: pn4.y -> %p, pts[cities[indexB+1].id].y -> %p\r\n", (void*)&pn4.y, (void*)&pts[cities[indexB+1].id].y);
+#endif
     MWRF(&pn1.x, MRDF(&pts[cities[indexA].id].x, &ftmp[0]));
     MWRF(&pn1.y, MRDF(&pts[cities[indexA].id].y, &ftmp[1]));
     MWRF(&pn2.x, MRDF(&pts[cities[indexA+1].id].x, &ftmp[2]));
@@ -724,6 +760,9 @@ seedrand((float)time(0));
   cities = (City*)malloc(pathCount*sizeof(City));
   memset(cities, 0, pathCount*sizeof(City));
 
+  printf("Size of float: %lu\n", sizeof(float));
+  printf("Size of SVGPoint: %lu, size of points: %lu\n", sizeof(SVGPoint), pathCount*sizeof(SVGPoint));
+  printf("Size of ToolPath: %lu, size of paths: %lu\n", sizeof(ToolPath), pointsCount*sizeof(ToolPath));
   printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
   npaths = 0;
   calcPaths(points, paths, &npaths, cities);
@@ -758,6 +797,9 @@ seedrand((float)time(0));
     cityStart=1;
     for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
                             //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
+#ifdef SVG2GCODE_DEBUG
+      printf("addrs: paths[%d].city -> %p\r\n", k, (void*)&paths[k].city);
+#endif
       if (MRDI(&paths[k].city, &itmp) == -1) {  //means already written
           continue;
       } else if(MRDI(&paths[k].city, &itmp) == cities[i].id) {
@@ -767,6 +809,10 @@ seedrand((float)time(0));
     if(k >= npaths-1) {
       continue;
     }
+#ifdef SVG2GCODE_DEBUG
+    printf("addrs: paths[%d].points[0] -> %p\r\n", k, (void*)&paths[k].points[0]);
+    printf("addrs: paths[%d].points[1] -> %p\r\n", k, (void*)&paths[k].points[1]);
+#endif
     ftmp[0] = MRDF(&paths[k].points[0], &ftmp[0]);
     ftmp[1] = MRDF(&paths[k].points[1], &ftmp[1]);
     firstx = x = (ftmp[0]+zeroX)*scale+shiftX;
@@ -842,6 +888,11 @@ seedrand((float)time(0));
       first = 1;
       if(MRDI(&paths[j].city, &itmp) == cities[i].id) {
         bezCount = 0;
+#ifdef SVG2GCODE_DEBUG
+        for (int m = 0; m < 8; m++) {
+            printf("addrs: paths[%d].points[%d] -> %p\r\n", j, m, (void*)&paths[j].points[m]);
+        }
+#endif
         cubicBez(MRDF(&paths[j].points[0], &ftmp[0]), MRDF(&paths[j].points[1], &ftmp[1]), MRDF(&paths[j].points[2], &ftmp[2]), MRDF(&paths[j].points[3], &ftmp[3]), \
                  MRDF(&paths[j].points[4], &ftmp[4]), MRDF(&paths[j].points[5], &ftmp[5]), MRDF(&paths[j].points[6], &ftmp[6]), MRDF(&paths[j].points[7], &ftmp[7]), tol, 0);
         bxold=x;
@@ -883,10 +934,16 @@ seedrand((float)time(0));
           bxold = bx;
           byold = by;
         }
+#ifdef SVG2GCODE_DEBUG
+      printf("addrs: paths[%d].city -> %p\r\n", j, (void*)&paths[j].city);
+#endif
       MWRI(&paths[j].city, -1);
       } else
 	        break;
     }
+#ifdef SVG2GCODE_DEBUG
+    printf("addrs: paths[%d].closed -> %p\r\n", j, (void*)&paths[j].closed);
+#endif
     if(MRDC(&paths[j].closed, &ctmp)) {
       fprintf(gcode, "( end )\n");
       fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
