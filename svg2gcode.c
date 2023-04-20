@@ -960,6 +960,13 @@ seedrand((float)time(0));
   fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
+
+  fflush(gcode);
+  fsync(fileno(gcode));
+#ifdef USE_MEMUTIL
+  memutil_holdover_force_write(gcode);
+#endif
+
   fclose(gcode);
 #ifdef USE_MEMUTIL
   memutil_swap_free(points);
