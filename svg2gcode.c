@@ -173,7 +173,7 @@ static void cubicBez(float x1, float y1, float x2, float y2,
     bezPoints[bezCount].y = y4;
     bezCount++;
     if(bezCount > 63) {
-      printf("!bez count\n");
+      //printf("!bez count\n");
       bezCount = 63;
     }
   }
@@ -366,7 +366,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
   struct NSVGpath* path;
   int i;
   int colorMatch = 0;
-  float ftmp;
+  float ftmp[2];
   bounds[0] = FLT_MAX;
   bounds[1] = FLT_MAX;
   bounds[2] = -FLT_MAX;
@@ -378,13 +378,20 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
     for (path = shape->paths; path != NULL; path = path->next) { //for all path's in a shape. Path's inherit their shape color.
       for (i = 0; i < path->npts-1; i++) { //for all points in a path.
         float* p = &path->pts[i*2];
+
+        ftmp[0] = MRDF(&p[0], &ftmp[0]);
+        ftmp[1] = MRDF(&p[1], &ftmp[1]);
+        
+        bounds[0] = minf(bounds[0], ftmp[0]);
+        bounds[1] = minf(bounds[1], ftmp[1]);
+        bounds[2] = maxf(bounds[2], ftmp[0]);
+        bounds[3] = maxf(bounds[3], ftmp[1]);
+
 #ifdef SVG2GCODE_DEBUG
-        printf("addrs: p[0]-> %p, p[1] -> %p\r\n", (void*)&p[0], (void*)&p[1]);
+        printf("addrs: p[0] -> %p, p[1] -> %p\r\n", (void*)&p[0], (void*)&p[1]);
+        printf("data: p[0] -> %f, p[1] -> %f\r\n", ftmp[0], ftmp[1]);
+        printf("bounds: 0 -> %5.3f, 1 -> %5.3f, 2 -> %5.3f, 3 -> %5.3f\r\n", bounds[0], bounds[1], bounds[2], bounds[3]);
 #endif
-        bounds[0] = minf(bounds[0], MRDF(&p[0], &ftmp));
-        bounds[1] = minf(bounds[1], MRDF(&p[1], &ftmp));
-        bounds[2] = maxf(bounds[2], MRDF(&p[0], &ftmp));
-        bounds[3] = maxf(bounds[3], MRDF(&p[1], &ftmp));
         pointsCount++;
       }
       pathCount++;
@@ -404,6 +411,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
     }
     shapeCount++;
   }
+  printf("pointsCount = %d\n", pointsCount);
   printf("pathCount = %d\n", pathCount);
   printf("shapeCount = %d\n",shapeCount);
 }

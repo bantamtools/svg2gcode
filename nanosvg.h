@@ -85,7 +85,6 @@ extern "C" {
 #define MWRC(x, y)          memutil_swap_write_char((void*)x, y);
 #define MWRI(x, y)          memutil_swap_write_int((void*)x, y);
 #define MWRF(x, y)          memutil_swap_write_float((void*)x, y);
-#define MWRFP(x, y)         memutil_swap_write_float((void*)&x, y);
 
 #ifdef MEMUTIL_DEBUG_VERBOSE
 #define MRDI(x, y)          int_check(memutil_swap_read_int((void*)x, y))
@@ -105,7 +104,6 @@ extern "C" {
 #define MWRC(x, y)          *x = y;
 #define MWRI(x, y)          *x = y;
 #define MWRF(x, y)          *x = y;
-#define MWRFP(x, y)         x = y;
 
 #ifdef MEMUTIL_DEBUG_VERBOSE
 #define MRDI(x, y)          int_check(*x)\
@@ -569,11 +567,15 @@ static void nsvg__xformPremultiply(float* t, float* s)
 
 static void nsvg__xformPoint(float* dx, float* dy, float x, float y, float* t)
 {
+    float ftmp[2];
+
+    MWRF(dx, x*t[0] + y*t[2] + t[4]);
+    MWRF(dy, x*t[1] + y*t[3] + t[5]);
+
 #ifdef MEMUTIL_DEBUG
-    printf("%s, addrs: dx -> %p, dy -> %p, x -> %p, y -> %p, t -> %p\r\n", __func__, (void*)dx, (void*)dy, (void*)&x, (void*)&y, (void*)t);
+    printf("%s, values: dx -> %f, dy -> %f, x -> %f, y -> %f\r\n", __func__, MRDF(dx, &ftmp[0]), MRDF(dy, &ftmp[1]), x, y);
+    printf("t[0] -> %f, t[1] -> %f, t[2] -> %f, t[3] -> %f, t[4] -> %f, t[5] -> %f\r\n", t[0], t[1], t[2], t[3], t[4], t[5]);
 #endif
-    MWRFP(*dx, x*t[0] + y*t[2] + t[4])
-    MWRFP(*dy, x*t[1] + y*t[3] + t[5])
 }
 
 static void nsvg__xformVec(float* dx, float* dy, float x, float y, float* t)
@@ -777,6 +779,9 @@ static void nsvg__addPoint(NSVGparser* p, float x, float y)
     p->pts[p->npts*2+0] = x;
 	p->pts[p->npts*2+1] = y;
     p->npts++;
+#ifdef MEMUTIL_DEBUG
+    printf("%s: Adding points p[%d] = %f, p[%d] = %f...\r\n", __func__, p->npts*2+0, x, p->npts*2+1, y);
+#endif
 }
 
 static void nsvg__moveTo(NSVGparser* p, float x, float y)
@@ -1026,7 +1031,6 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 	// Transform path.
 	for (i = 0; i < p->npts; ++i)
   		nsvg__xformPoint(&path->pts[i*2], &path->pts[i*2+1], p->pts[i*2], p->pts[i*2+1], attr->xform);
-		//nsvg__xformPoint(&path->pts[i*2], &path->pts[i*2+1], MRDF(&p->pts[i*2], &ftmp), MRDF(&p->pts[i*2+1], &ftmp), attr->xform);
 	
 	// Find bounds
 	for (i = 0; i < path->npts-1; i += 3) {
@@ -1460,9 +1464,7 @@ static int nsvg__parseTransformArgs(const char* str, float* args, int maxNa, int
 	const char* ptr;
     char tmp;
     char tmp_buf[2048];
-#ifdef MEMUTIL_DEBUG
-    printf("%s, addrs: str -> %p, ptr -> %p, end -> %p\r\n", __func__, (void*)str, (void*)ptr, (void*)end);
-#endif
+
 	*na = 0;
 	ptr = str;
 	while (MRDC(ptr, &tmp) && MRDC(ptr, &tmp) != '(') ++ptr;
@@ -1482,6 +1484,9 @@ static int nsvg__parseTransformArgs(const char* str, float* args, int maxNa, int
 			++ptr;
 		}
 	}
+#ifdef MEMUTIL_DEBUG
+    printf("%s, addrs: str -> %p, ptr -> %p, end -> %p\r\n", __func__, (void*)str, (void*)ptr, (void*)end);
+#endif
 	return (int)(end - str);
 }
 
