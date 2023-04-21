@@ -2881,7 +2881,7 @@ NSVGimage* nsvgParseFromFile(const char* filename, const char* units, float dpi)
 	fclose(fp);
 	image = nsvgParse(data, units, dpi);
 #ifdef USE_MEMUTIL
-    memutil_swap_force_write(); // Make sure no holdover data left to be written to SD
+    memutil_holdover_force_write(); // Make sure no holdover data left to be written to SD
     //memutil_close();
 	memutil_swap_free(data);
 #else
