@@ -179,10 +179,14 @@ static void cubicBez(float x1, float y1, float x2, float y2,
   }
 }
 //#define TESTRNG
+#ifdef USE_MEMUTIL
+#define RANDOM() rand()
+#else
 #ifdef _WIN32 //win doesn't have good RNG
 #define RANDOM() drnd31() //((double)rand()/(double)RAND_MAX)
 #else //OSX LINUX much faster than win
 #define RANDOM() (drand48())
+#endif
 #endif
 
 
@@ -223,6 +227,9 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
       //printf("City number %d color = %d\n", i, (shape->stroke.color));
       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
         float *pp = &path->pts[j*2];
+        if (k % 1000 == 0) {
+            printf("paths = %d\r\n", k);
+        }
 #ifdef SVG2GCODE_DEBUG
         printf("addrs: path -> %p, shape -> %p, pp -> %p\r\n", (void*)path, (void*)shape, (void*)pp);
 #endif
@@ -230,8 +237,12 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
 #ifdef SVG2GCODE_DEBUG
         printf("addrs: points[%d].x -> %p, pp[0] -> %p, points[%d].y -> %p, pp[1] -> %p\r\n", i, (void*)&points[i].x, (void*)&pp[0], i, (void*)&points[i].y, (void*)&pp[1]);
 #endif
-        MWRF(&points[i].x, MRDF(&pp[0], &ftmp[0]));
-        MWRF(&points[i].y, MRDF(&pp[1], &ftmp[1]));
+#ifdef USE_MEMUTIL
+        memutil_swap_memcpy(&points[i].x, &pp[0], (2 * sizeof(float))); 
+#else
+        points[i].x = pp[0];
+        points[i].y = pp[1];
+#endif
 
 #ifdef DO_HPGL
         fprintf(f,"PU%d,%d;",(int)(MRDF(&pp[0], &ftmp[0])),(int)(MRDF(&pp[1], &ftmp[1])));
@@ -244,12 +255,19 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
         if(doBez) { //if we are doing bezier points, this will be reached and add the bezier points.
           bezCount++;
           //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
-          for(b=0;b<8;b++){
 #ifdef SVG2GCODE_DEBUG
+          for (b = 0; b < 8; b++) {
             printf("addrs: paths[%d].points[%d] -> %p, pp[%d] -> %p\r\n", k, b, (void*)&paths[k].points[b], b, (void*)&pp[b]);
-#endif
-            MWRF(&paths[k].points[b], MRDF(&pp[b], &ftmp[b]));
           }
+#endif
+#ifdef USE_MEMUTIL
+          // Copy all 8 bezier points at once
+          memutil_swap_memcpy(&paths[k].points[0], &pp[0], (8 * sizeof(float)));     
+#else
+          for(b=0;b<8;b++){
+            paths[k].points[b] = pp[b];
+          }
+#endif
         } else {
 #ifdef SVG2GCODE_DEBUG
           printf("addrs: paths[%d].points[0] -> %p, pp[0] -> %p\r\n", k, (void*)&paths[k].points[0], (void*)&pp[0]);
@@ -257,10 +275,15 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
           printf("addrs: paths[%d].points[2] -> %p, pp[0] -> %p\r\n", k, (void*)&paths[k].points[2], (void*)&pp[0]);
           printf("addrs: paths[%d].points[3] -> %p, pp[1] -> %p\r\n", k, (void*)&paths[k].points[3], (void*)&pp[1]);
 #endif
-          MWRF(&paths[k].points[0], MRDF(&pp[0], &ftmp[0]));
-          MWRF(&paths[k].points[1], MRDF(&pp[1], &ftmp[1]));
-          MWRF(&paths[k].points[2], MRDF(&pp[0], &ftmp[2]));
-          MWRF(&paths[k].points[3], MRDF(&pp[1], &ftmp[3]));
+#ifdef USE_MEMUTIL
+          memutil_swap_memcpy(&paths[k].points[0], &pp[0], (2 * sizeof(float))); 
+          memutil_swap_memcpy(&paths[k].points[2], &pp[0], (2 * sizeof(float))); 
+#else
+          paths[k].points[0] = pp[0];
+          paths[k].points[1] = pp[1];
+          paths[k].points[2] = pp[0];
+          paths[k].points[3] = pp[1];
+#endif
         }
 #ifdef SVG2GCODE_DEBUG
         printf("addrs: paths[%d].closed -> %p, paths[%d].city -> %p\r\n", k, (void*)&paths[k].closed, k, (void*)&paths[k].city);
@@ -433,7 +456,11 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
   float ftmp[8];
+#ifdef USE_MEMUTIL
+  for(i=0;i<200*pathCount;i++) {
+#else
   for(i=0;i<800*pathCount;i++) {
+#endif
     indexA = (int)(RANDOM()*(pathCount-2));
     indexB = (int)(RANDOM()*(pathCount-2));
     if(abs(indexB-indexA) < 2){
@@ -448,20 +475,27 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
     printf("addrs: pn1.x -> %p, pts[cities[indexA].id].x -> %p\r\n", (void*)&pn1.x, (void*)&pts[cities[indexA].id].x);
     printf("addrs: pn1.y -> %p, pts[cities[indexA].id].y -> %p\r\n", (void*)&pn1.y, (void*)&pts[cities[indexA].id].y);
     printf("addrs: pn2.x -> %p, pts[cities[indexA+1].id].x -> %p\r\n", (void*)&pn2.x, (void*)&pts[cities[indexA+1].id].x);
-    printf("addrs: pn2.y -> %p, pts[cities[index+1].id].y -> %p\r\n", (void*)&pn2.y, (void*)&pts[cities[indexA+1].id].y);
+    printf("addrs: pn2.y -> %p, pts[cities[indexA+1].id].y -> %p\r\n", (void*)&pn2.y, (void*)&pts[cities[indexA+1].id].y);
     printf("addrs: pn3.x -> %p, pts[cities[indexB].id].x -> %p\r\n", (void*)&pn3.x, (void*)&pts[cities[indexB].id].x);
     printf("addrs: pn3.y -> %p, pts[cities[indexB].id].y -> %p\r\n", (void*)&pn3.y, (void*)&pts[cities[indexB].id].y);
     printf("addrs: pn4.x -> %p, pts[cities[indexB+1].id].x -> %p\r\n", (void*)&pn4.x, (void*)&pts[cities[indexB+1].id].x);
     printf("addrs: pn4.y -> %p, pts[cities[indexB+1].id].y -> %p\r\n", (void*)&pn4.y, (void*)&pts[cities[indexB+1].id].y);
 #endif
-    MWRF(&pn1.x, MRDF(&pts[cities[indexA].id].x, &ftmp[0]));
-    MWRF(&pn1.y, MRDF(&pts[cities[indexA].id].y, &ftmp[1]));
-    MWRF(&pn2.x, MRDF(&pts[cities[indexA+1].id].x, &ftmp[2]));
-    MWRF(&pn2.y, MRDF(&pts[cities[indexA+1].id].y, &ftmp[3]));
-    MWRF(&pn3.x, MRDF(&pts[cities[indexB].id].x, &ftmp[4]));
-    MWRF(&pn3.y, MRDF(&pts[cities[indexB].id].y, &ftmp[5]));
-    MWRF(&pn4.x, MRDF(&pts[cities[indexB+1].id].x, &ftmp[6]));
-    MWRF(&pn4.y, MRDF(&pts[cities[indexB+1].id].y, &ftmp[7]));
+#ifdef USE_MEMUTIL
+    memutil_swap_read_buf(&pts[cities[indexA].id].x, (uint8_t*)&pn1.x, (2 * sizeof(float)));
+    memutil_swap_read_buf(&pts[cities[indexA+1].id].x, (uint8_t*)&pn2.x, (2 * sizeof(float)));
+    memutil_swap_read_buf(&pts[cities[indexB].id].x, (uint8_t*)&pn3.x, (2 * sizeof(float)));
+    memutil_swap_read_buf(&pts[cities[indexB+1].id].x, (uint8_t*)&pn4.x, (2 * sizeof(float)));
+#else
+    pn1.x = pts[cities[indexA].id].x;
+    pn1.y = pts[cities[indexA].id].y;
+    pn2.x = pts[cities[indexA+1].id].x;
+    pn2.y = pts[cities[indexA+1].id].y;
+    pn3.x = pts[cities[indexB].id].x;
+    pn3.y = pts[cities[indexB].id].y;
+    pn4.x = pts[cities[indexB+1].id].x;
+    pn4.y = pts[cities[indexB+1].id].y;
+#endif
     dnx = pn1.x-pn2.x;
     dny = pn1.y-pn2.y;
     if(xy) {
@@ -547,7 +581,11 @@ int generateGcode(int argc, char* argv[]) {
   float height =-1;
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
+#ifdef USE_MEMUTIL
+  int numReord = 10;
+#else
   int numReord = 30;
+#endif
   float scale = 0.05; //make this dynamic. //this changes with widthInmm
   float margin = 40; //xmargin around drawn elements in mm
   float ymargin = 35; //ymargin around drawn elements in mm
