@@ -179,14 +179,10 @@ static void cubicBez(float x1, float y1, float x2, float y2,
   }
 }
 //#define TESTRNG
-#ifdef USE_MEMUTIL
-#define RANDOM() rand()
-#else
 #ifdef _WIN32 //win doesn't have good RNG
 #define RANDOM() drnd31() //((double)rand()/(double)RAND_MAX)
 #else //OSX LINUX much faster than win
 #define RANDOM() (drand48())
-#endif
 #endif
 
 
