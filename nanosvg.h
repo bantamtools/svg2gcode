@@ -823,7 +823,7 @@ static void nsvg__popAttr(NSVGparser* p)
 
 static NSVGgradientData* nsvg__findGradientData(NSVGparser* p, const char* id)
 {
-    char tmp_buf[64];
+    char tmp_buf[2048];
 	NSVGgradientData* grad = p->gradients;
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: id -> %p\r\n", __func__, (void*)id);
@@ -1141,7 +1141,7 @@ static unsigned int nsvg__parseColorHex(const char* str)
 	unsigned int c = 0, r = 0, g = 0, b = 0;
 	int n = 0;
     char tmp;
-    char tmp_buf[64];
+    char tmp_buf[2048];
 	str++; // skip #
 
 	// Calculate number of characters.
@@ -1167,7 +1167,7 @@ static unsigned int nsvg__parseColorRGB(const char* str)
 #endif
 	int r = -1, g = -1, b = -1;
 	char s1[32]="", s2[32]="";
-    char tmp_buf[64];
+    char tmp_buf[2048];
 	sscanf(MRDS(str + 4, tmp_buf), "%d%[%%, \t]%d%[%%, \t]%d", &r, s1, &g, s2, &b);
 	if (strchr(s1, '%')) {
 		return NSVG_RGB((r*255)/100,(g*255)/100,(b*255)/100);
@@ -1341,7 +1341,7 @@ static unsigned int nsvg__parseColorName(const char* str)
     printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
                 int i, ncolors = sizeof(nsvg__colors) / sizeof(NSVGNamedColor);
-	char tmp_buf[64];
+	char tmp_buf[2048];
 
 	for (i = 0; i < ncolors; i++) {
 		if (strcmp(nsvg__colors[i].name, MRDS(str, tmp_buf)) == 0) {
@@ -1359,7 +1359,7 @@ static unsigned int nsvg__parseColor(const char* str)
 #endif
 	int len = 0;
     char tmp;
-    char tmp_buf[64];
+    char tmp_buf[2048];
 	while(MRDC(str, &tmp) == ' ') ++str;
 	len = strlen(MRDS(str, tmp_buf));
 	if (len >= 1 && MRDC(str, &tmp) == '#')
@@ -1433,7 +1433,7 @@ static float nsvg__parseFloat(NSVGparser* p, const char* str, int dir)
 {
 	float val = 0;
 	char units[32]="";
-    char tmp_buf[64];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
@@ -1446,7 +1446,7 @@ static int nsvg__parseTransformArgs(const char* str, float* args, int maxNa, int
 	const char* end;
 	const char* ptr;
     char tmp;
-    char tmp_buf[64];
+    char tmp_buf[2048];
 
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
@@ -1585,7 +1585,7 @@ static void nsvg__parseTransform(float* xform, const char* str)
 {
 	float t[6];
     char tmp;
-    char tmp_buf[16];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
@@ -1765,7 +1765,7 @@ static void nsvg__parseStyle(NSVGparser* p, const char* str)
 static void nsvg__parseAttribs(NSVGparser* p, const char** attr)
 {
 	int i;
-    char tmp_buf[16];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2130,7 +2130,7 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 	int i;
 	char item[64];
     char tmp;
-    char tmp_buf[16];
+    char tmp_buf[2048];
 
 
 #ifdef MEMUTIL_DEBUG
@@ -2265,7 +2265,7 @@ static void nsvg__parseRect(NSVGparser* p, const char** attr)
 	float rx = -1.0f; // marks not set
 	float ry = -1.0f;
 	int i;
-    char tmp_buf[16];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2320,7 +2320,7 @@ static void nsvg__parseCircle(NSVGparser* p, const char** attr)
 	float cy = 0.0f;
 	float r = 0.0f;
 	int i;
-    char tmp_buf[16];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2354,7 +2354,7 @@ static void nsvg__parseEllipse(NSVGparser* p, const char** attr)
 	float rx = 0.0f;
 	float ry = 0.0f;
 	int i;
-    char tmp_buf[16];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2390,7 +2390,7 @@ static void nsvg__parseLine(NSVGparser* p, const char** attr)
 	float x2 = 0.0;
 	float y2 = 0.0;
 	int i;
-    char tmp_buf[16];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2421,7 +2421,7 @@ static void nsvg__parsePoly(NSVGparser* p, const char** attr, int closeFlag)
 	int nargs, npts = 0;
 	char item[64];
     char tmp;
-    char tmp_buf[64];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2456,7 +2456,7 @@ static void nsvg__parsePoly(NSVGparser* p, const char** attr, int closeFlag)
 static void nsvg__parseSVG(NSVGparser* p, const char** attr)
 {
 	int i;
-    char tmp_buf[64];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2502,7 +2502,7 @@ static void nsvg__parseGradient(NSVGparser* p, const char** attr, char type)
 	int i;
     char temp;
     char tmp;
-    char tmp_buf[64];
+    char tmp_buf[2048];
 	NSVGgradientData* grad = (NSVGgradientData*)malloc(sizeof(NSVGgradientData));
 	if (grad == NULL) return;
 	memset(grad, 0, sizeof(NSVGgradientData));
@@ -2569,7 +2569,7 @@ static void nsvg__parseGradientStop(NSVGparser* p, const char** attr)
 	NSVGgradientData* grad;
 	NSVGgradientStop* stop;
 	int i, idx;
-    char tmp_buf[64];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2610,7 +2610,7 @@ static void nsvg__parseGradientStop(NSVGparser* p, const char** attr)
 
 static void nsvg__startElement(void* ud, const char* el, const char** attr)
 {
-    char tmp_buf[64];
+    char tmp_buf[2048];
 	NSVGparser* p = (NSVGparser*)ud;
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: el -> %p, attr[0] -> %p\r\n", __func__, (void*)el, (void*)attr[0]);
@@ -2681,7 +2681,7 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
 static void nsvg__endElement(void* ud, const char* el)
 {
 	NSVGparser* p = (NSVGparser*)ud;
-    char tmp_buf[64];
+    char tmp_buf[2048];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: el -> %p\r\n", __func__, (void*)el);
 #endif
