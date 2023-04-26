@@ -452,11 +452,11 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
   float ftmp[8];
-#ifdef USE_MEMUTIL
-  for(i=0;i<200*pathCount;i++) {
-#else
-  for(i=0;i<800*pathCount;i++) {
-#endif
+  //printf("Path count = %i\n", pathCount);
+  int numComp = floor(sqrt(pointsCount));
+  //printf("numComp = %i\n",numComp);
+  for(i=0;i<numComp*pathCount;i++) {
+    //printf("Reorder i = %i\n", i);
     indexA = (int)(RANDOM()*(pathCount-2));
     indexB = (int)(RANDOM()*(pathCount-2));
     if(abs(indexB-indexA) < 2){
