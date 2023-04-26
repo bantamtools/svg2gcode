@@ -691,10 +691,11 @@ static void nsvg__deletePaths(NSVGpath* path)
 		if (path->pts != NULL)
 #ifdef USE_MEMUTIL
 			memutil_swap_free(path->pts);
+            memutil_swap_free(path);
 #else
 			free(path->pts);
+            free(path);
 #endif
-		free(path);
 		path = next;
 	}
 }
@@ -823,7 +824,7 @@ static void nsvg__popAttr(NSVGparser* p)
 
 static NSVGgradientData* nsvg__findGradientData(NSVGparser* p, const char* id)
 {
-    char tmp_buf[2048];
+    char tmp_buf[255];
 	NSVGgradientData* grad = p->gradients;
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: id -> %p\r\n", __func__, (void*)id);
@@ -903,60 +904,72 @@ static void nsvg__addShape(NSVGparser* p)
 	float scale = 1.0f;
 	NSVGshape *shape, *cur, *prev;
 	NSVGpath* path;
+    char tmp;
+    int itmp;
+    float ftmp[8];
 
 	if (p->plist == NULL)
 		return;
 
+#ifdef USE_MEMUTIL
+	shape = (NSVGshape*)memutil_swap_malloc(sizeof(NSVGshape)); 
+    if (shape == NULL) goto error;
+	memutil_swap_memset(shape, 0, sizeof(NSVGshape));
+#else
 	shape = (NSVGshape*)malloc(sizeof(NSVGshape));
 	if (shape == NULL) goto error;
 	memset(shape, 0, sizeof(NSVGshape));
+#endif
 
 	scale = nsvg__maxf(fabsf(attr->xform[0]), fabsf(attr->xform[3]));
-	shape->strokeWidth = attr->strokeWidth * scale;
-	shape->opacity = attr->opacity;
+    MWRF(&shape->strokeWidth, attr->strokeWidth * scale);
+    MWRF(&shape->opacity, attr->opacity);
 
-	shape->paths = p->plist;
+    shape->paths = p->plist;
 	p->plist = NULL;
 
-	// Calculate shape bounds
-	shape->bounds[0] = shape->paths->bounds[0];
-	shape->bounds[1] = shape->paths->bounds[1];
-	shape->bounds[2] = shape->paths->bounds[2];
-	shape->bounds[3] = shape->paths->bounds[3];
-	for (path = shape->paths->next; path != NULL; path = path->next) {
-		shape->bounds[0] = nsvg__minf(shape->bounds[0], path->bounds[0]);
-		shape->bounds[1] = nsvg__minf(shape->bounds[1], path->bounds[1]);
-		shape->bounds[2] = nsvg__maxf(shape->bounds[2], path->bounds[2]);
-		shape->bounds[3] = nsvg__maxf(shape->bounds[3], path->bounds[3]);
-	}
+    printf("struct addrs: fill -> %p, stroke -> %p, opacity -> %p, strokeWidth -> %p\r\n", (void*)&shape->fill, (void*)&shape->stroke, (void*)&shape->opacity, (void*)&shape->strokeWidth);
+    printf("bounds[0] -> %p, bounds[1] -> %p, bounds[2] -> %p, bounds[3] -> %p\r\n", (void*)&shape->bounds[0], (void*)&shape->bounds[1], (void*)&shape->bounds[2], (void*)&shape->bounds[3]);
+    printf("paths -> %p, next -> %p\r\n", (void*)shape->paths, (void*)shape->next);
 
+	// Calculate shape bounds
+    MWRF(&shape->bounds[0], shape->paths->bounds[0]);
+    MWRF(&shape->bounds[1], shape->paths->bounds[1]);
+    MWRF(&shape->bounds[2], shape->paths->bounds[2]);
+    MWRF(&shape->bounds[3], shape->paths->bounds[3]);
+
+	for (path = shape->paths->next; path != NULL; path = path->next) {
+
+        MWRF(&shape->bounds[0], nsvg__minf(MRDF(&shape->bounds[0], &ftmp[0]), MRDF(&path->bounds[0], &ftmp[1])));
+        MWRF(&shape->bounds[1], nsvg__minf(MRDF(&shape->bounds[1], &ftmp[2]), MRDF(&path->bounds[1], &ftmp[3])));
+        MWRF(&shape->bounds[2], nsvg__maxf(MRDF(&shape->bounds[2], &ftmp[4]), MRDF(&path->bounds[2], &ftmp[5])));
+        MWRF(&shape->bounds[3], nsvg__maxf(MRDF(&shape->bounds[3], &ftmp[6]), MRDF(&path->bounds[3], &ftmp[7])));
+	}
 	// Set fill
 	if (attr->hasFill == 0) {
-		shape->fill.type = NSVG_PAINT_NONE;
+        MWRC(&shape->fill.type, NSVG_PAINT_NONE);
 	} else if (attr->hasFill == 1) {
-		shape->fill.type = NSVG_PAINT_COLOR;
-		shape->fill.color = attr->fillColor;
-		shape->fill.color |= (unsigned int)(attr->fillOpacity*255) << 24;
+        MWRC(&shape->fill.type, NSVG_PAINT_COLOR);
+        MWRI(&shape->fill.color, attr->fillColor);
+        MWRI(&shape->fill.color, MRDI(&shape->fill.color, &itmp) | (unsigned int)(attr->fillOpacity*255) << 24);
 	} else if (attr->hasFill == 2) {
-		shape->fill.gradient = nsvg__createGradient(p, attr->fillGradient, shape->bounds, &shape->fill.type);
-		if (shape->fill.gradient == NULL) {
-			shape->fill.type = NSVG_PAINT_NONE;
+		shape->fill.gradient = nsvg__createGradient(p, attr->fillGradient, shape->bounds, &shape->fill.type);   //TODO convert bounds? filltype?
+		if (shape->fill.gradient == NULL) {  //noconvert
+			MWRC(&shape->fill.type, NSVG_PAINT_NONE);
 		}
 	}
-
 	// Set stroke
 	if (attr->hasStroke == 0) {
-		shape->stroke.type = NSVG_PAINT_NONE;
+		MWRC(&shape->stroke.type, NSVG_PAINT_NONE);
 	} else if (attr->hasStroke == 1) {
-		shape->stroke.type = NSVG_PAINT_COLOR;
-		shape->stroke.color = attr->strokeColor;
-		shape->stroke.color |= (unsigned int)(attr->strokeOpacity*255) << 24;
+		MWRC(&shape->stroke.type, NSVG_PAINT_COLOR);
+        MWRI(&shape->stroke.color, attr->strokeColor);
+        MWRI(&shape->stroke.color, MRDI(&shape->stroke.color, &itmp) | (unsigned int)(attr->strokeOpacity*255) << 24);
 	} else if (attr->hasStroke == 2) {
-		shape->stroke.gradient = nsvg__createGradient(p, attr->strokeGradient, shape->bounds, &shape->stroke.type);
-		if (shape->stroke.gradient == NULL)
-			shape->stroke.type = NSVG_PAINT_NONE;
+		shape->stroke.gradient = nsvg__createGradient(p, attr->strokeGradient, shape->bounds, &shape->stroke.type);  //TODO convert bounds? filltype?
+		if (shape->stroke.gradient == NULL)  //noconvert
+			MWRC(&shape->stroke.type, NSVG_PAINT_NONE);
 	}
-
 	// Add to tail
 	prev = NULL;
 	cur = p->image->shapes;
@@ -972,7 +985,11 @@ static void nsvg__addShape(NSVGparser* p)
 	return;
 
 error:
+#ifdef USE_MEMUTIL
+	if (shape) memutil_swap_free(shape);
+#else
 	if (shape) free(shape);
+#endif
 }
 
 static void nsvg__addPath(NSVGparser* p, char closed)
@@ -982,8 +999,9 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 	float bounds[4];
 	float* curve;
 	int i;
+    int itmp;
     char tmp;
-    float ftmp;
+    float ftmp[4];
 
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: closed -> %p\r\n", __func__, (void*)&closed);
@@ -1008,27 +1026,27 @@ static void nsvg__addPath(NSVGparser* p, char closed)
 #endif
 
 	if (path->pts == NULL) goto error;
-	path->closed = closed;  //noconvert
-	path->npts = p->npts;
+    MWRC(&path->closed, closed);
+    MWRI(&path->npts, p->npts)
 	
 	// Transform path.
 	for (i = 0; i < p->npts; ++i)
   		nsvg__xformPoint(&path->pts[i*2], &path->pts[i*2+1], p->pts[i*2], p->pts[i*2+1], attr->xform);
 	
 	// Find bounds
-	for (i = 0; i < path->npts-1; i += 3) {
+	for (i = 0; i < MRDI(&path->npts, &itmp)-1; i += 3) {
 		curve = &path->pts[i*2];
 		nsvg__curveBounds(bounds, curve);
 		if (i == 0) {
-			path->bounds[0] = bounds[0];
-			path->bounds[1] = bounds[1];
-			path->bounds[2] = bounds[2];
-			path->bounds[3] = bounds[3];
+            MWRF(&path->bounds[0], bounds[0]);
+            MWRF(&path->bounds[1], bounds[1]);
+            MWRF(&path->bounds[2], bounds[2]);
+            MWRF(&path->bounds[3], bounds[3]);
 		} else {
-			path->bounds[0] = nsvg__minf(path->bounds[0], bounds[0]);
-			path->bounds[1] = nsvg__minf(path->bounds[1], bounds[1]);
-			path->bounds[2] = nsvg__maxf(path->bounds[2], bounds[2]);
-			path->bounds[3] = nsvg__maxf(path->bounds[3], bounds[3]);
+            MWRF(&path->bounds[0], nsvg__minf(MRDF(&path->bounds[0], &ftmp[0]), bounds[0]));
+            MWRF(&path->bounds[1], nsvg__minf(MRDF(&path->bounds[1], &ftmp[1]), bounds[1]));
+            MWRF(&path->bounds[2], nsvg__maxf(MRDF(&path->bounds[2], &ftmp[2]), bounds[2]));
+            MWRF(&path->bounds[3], nsvg__maxf(MRDF(&path->bounds[3], &ftmp[3]), bounds[3]));
 		}
 	}
 
@@ -1041,10 +1059,11 @@ error:
 	if (path != NULL) {
 #ifdef USE_MEMUTIL
         if (path->pts != NULL) memutil_swap_free(path->pts);
+        memutil_swap_free(path);
 #else
 		if (path->pts != NULL) free(path->pts);
+        free(path);
 #endif
-		free(path);
 	}
 }
 
@@ -1141,7 +1160,7 @@ static unsigned int nsvg__parseColorHex(const char* str)
 	unsigned int c = 0, r = 0, g = 0, b = 0;
 	int n = 0;
     char tmp;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 	str++; // skip #
 
 	// Calculate number of characters.
@@ -1167,7 +1186,7 @@ static unsigned int nsvg__parseColorRGB(const char* str)
 #endif
 	int r = -1, g = -1, b = -1;
 	char s1[32]="", s2[32]="";
-    char tmp_buf[2048];
+    char tmp_buf[255];
 	sscanf(MRDS(str + 4, tmp_buf), "%d%[%%, \t]%d%[%%, \t]%d", &r, s1, &g, s2, &b);
 	if (strchr(s1, '%')) {
 		return NSVG_RGB((r*255)/100,(g*255)/100,(b*255)/100);
@@ -1341,7 +1360,7 @@ static unsigned int nsvg__parseColorName(const char* str)
     printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
                 int i, ncolors = sizeof(nsvg__colors) / sizeof(NSVGNamedColor);
-	char tmp_buf[2048];
+	char tmp_buf[255];
 
 	for (i = 0; i < ncolors; i++) {
 		if (strcmp(nsvg__colors[i].name, MRDS(str, tmp_buf)) == 0) {
@@ -1359,7 +1378,7 @@ static unsigned int nsvg__parseColor(const char* str)
 #endif
 	int len = 0;
     char tmp;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 	while(MRDC(str, &tmp) == ' ') ++str;
 	len = strlen(MRDS(str, tmp_buf));
 	if (len >= 1 && MRDC(str, &tmp) == '#')
@@ -1433,7 +1452,7 @@ static float nsvg__parseFloat(NSVGparser* p, const char* str, int dir)
 {
 	float val = 0;
 	char units[32]="";
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
@@ -1446,7 +1465,7 @@ static int nsvg__parseTransformArgs(const char* str, float* args, int maxNa, int
 	const char* end;
 	const char* ptr;
     char tmp;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
@@ -1585,7 +1604,7 @@ static void nsvg__parseTransform(float* xform, const char* str)
 {
 	float t[6];
     char tmp;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: str -> %p\r\n", __func__, (void*)str);
 #endif
@@ -1765,7 +1784,7 @@ static void nsvg__parseStyle(NSVGparser* p, const char* str)
 static void nsvg__parseAttribs(NSVGparser* p, const char** attr)
 {
 	int i;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2130,7 +2149,7 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 	int i;
 	char item[64];
     char tmp;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 
 
 #ifdef MEMUTIL_DEBUG
@@ -2265,7 +2284,7 @@ static void nsvg__parseRect(NSVGparser* p, const char** attr)
 	float rx = -1.0f; // marks not set
 	float ry = -1.0f;
 	int i;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2320,7 +2339,7 @@ static void nsvg__parseCircle(NSVGparser* p, const char** attr)
 	float cy = 0.0f;
 	float r = 0.0f;
 	int i;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2354,7 +2373,7 @@ static void nsvg__parseEllipse(NSVGparser* p, const char** attr)
 	float rx = 0.0f;
 	float ry = 0.0f;
 	int i;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2390,7 +2409,7 @@ static void nsvg__parseLine(NSVGparser* p, const char** attr)
 	float x2 = 0.0;
 	float y2 = 0.0;
 	int i;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2421,7 +2440,7 @@ static void nsvg__parsePoly(NSVGparser* p, const char** attr, int closeFlag)
 	int nargs, npts = 0;
 	char item[64];
     char tmp;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2456,7 +2475,7 @@ static void nsvg__parsePoly(NSVGparser* p, const char** attr, int closeFlag)
 static void nsvg__parseSVG(NSVGparser* p, const char** attr)
 {
 	int i;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2502,7 +2521,7 @@ static void nsvg__parseGradient(NSVGparser* p, const char** attr, char type)
 	int i;
     char temp;
     char tmp;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 	NSVGgradientData* grad = (NSVGgradientData*)malloc(sizeof(NSVGgradientData));
 	if (grad == NULL) return;
 	memset(grad, 0, sizeof(NSVGgradientData));
@@ -2569,7 +2588,7 @@ static void nsvg__parseGradientStop(NSVGparser* p, const char** attr)
 	NSVGgradientData* grad;
 	NSVGgradientStop* stop;
 	int i, idx;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: attr[0] -> %p\r\n", __func__, (void*)attr[0]);
 #endif
@@ -2610,7 +2629,7 @@ static void nsvg__parseGradientStop(NSVGparser* p, const char** attr)
 
 static void nsvg__startElement(void* ud, const char* el, const char** attr)
 {
-    char tmp_buf[2048];
+    char tmp_buf[255];
 	NSVGparser* p = (NSVGparser*)ud;
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: el -> %p, attr[0] -> %p\r\n", __func__, (void*)el, (void*)attr[0]);
@@ -2681,7 +2700,7 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
 static void nsvg__endElement(void* ud, const char* el)
 {
 	NSVGparser* p = (NSVGparser*)ud;
-    char tmp_buf[2048];
+    char tmp_buf[255];
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: el -> %p\r\n", __func__, (void*)el);
 #endif
@@ -2703,18 +2722,20 @@ static void nsvg__content(void* ud, const char* s)
 
 static void nsvg__imageBounds(NSVGparser* p, float* bounds)
 {
+    float ftmp[4];
 	NSVGshape* shape;
 	shape = p->image->shapes;
 	if (shape == NULL) return;
-	bounds[0] = shape->bounds[0];
-	bounds[1] = shape->bounds[1];
-	bounds[2] = shape->bounds[2];
-	bounds[3] = shape->bounds[3];
+	bounds[0] = MRDF(&shape->bounds[0], &ftmp[0]);
+	bounds[1] = MRDF(&shape->bounds[1], &ftmp[1]);
+	bounds[2] = MRDF(&shape->bounds[2], &ftmp[2]);
+	bounds[3] = MRDF(&shape->bounds[3], &ftmp[3]);
 	for (shape = shape->next; shape != NULL; shape = shape->next) {
-		bounds[0] = nsvg__minf(bounds[0], shape->bounds[0]);
-		bounds[1] = nsvg__minf(bounds[1], shape->bounds[1]);
-		bounds[2] = nsvg__maxf(bounds[2], shape->bounds[2]);
-		bounds[3] = nsvg__maxf(bounds[3], shape->bounds[3]);
+
+        bounds[0] = nsvg__minf(bounds[0], MRDF(&shape->bounds[0], &ftmp[0]));
+        bounds[1] = nsvg__minf(bounds[1], MRDF(&shape->bounds[1], &ftmp[1]));
+        bounds[2] = nsvg__maxf(bounds[2], MRDF(&shape->bounds[2], &ftmp[2]));
+        bounds[3] = nsvg__maxf(bounds[3], MRDF(&shape->bounds[3], &ftmp[3]));
 	}
 }
 
@@ -2744,8 +2765,10 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 	NSVGpath* path;
 	float tx, ty, sx, sy, us, bounds[4], t[6];
 	int i;
+    char tmp;
+    int itmp;
 	float* pt;
-    float ftmp;
+    float ftmp[4];
 
 #ifdef MEMUTIL_DEBUG
     printf("%s, addrs: units -> %p\r\n", __func__, (void*)units);
@@ -2793,28 +2816,32 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 	sx *= us;
 	sy *= us;
 	for (shape = p->image->shapes; shape != NULL; shape = shape->next) {
-		shape->bounds[0] = (shape->bounds[0] + tx) * sx;
-		shape->bounds[1] = (shape->bounds[1] + ty) * sy;
-		shape->bounds[2] = (shape->bounds[2] + tx) * sx;
-		shape->bounds[3] = (shape->bounds[3] + ty) * sy;
+
+        MWRF(&shape->bounds[0], (MRDF(&shape->bounds[0], &ftmp[0]) + tx) * sx);
+        MWRF(&shape->bounds[1], (MRDF(&shape->bounds[1], &ftmp[1]) + ty) * sy);
+        MWRF(&shape->bounds[2], (MRDF(&shape->bounds[2], &ftmp[2]) + tx) * sx);
+        MWRF(&shape->bounds[3], (MRDF(&shape->bounds[3], &ftmp[3]) + ty) * sy);
+
 		for (path = shape->paths; path != NULL; path = path->next) {
-			path->bounds[0] = (path->bounds[0] + tx) * sx;
-			path->bounds[1] = (path->bounds[1] + ty) * sy;
-			path->bounds[2] = (path->bounds[2] + tx) * sx;
-			path->bounds[3] = (path->bounds[3] + ty) * sy;
-			for (i =0; i < path->npts; i++) {
+
+            MWRF(&path->bounds[0], (MRDF(&path->bounds[0], &ftmp[0]) + tx) * sx);
+            MWRF(&path->bounds[1], (MRDF(&path->bounds[1], &ftmp[1]) + ty) * sy);
+            MWRF(&path->bounds[2], (MRDF(&path->bounds[2], &ftmp[2]) + tx) * sx);
+            MWRF(&path->bounds[3], (MRDF(&path->bounds[3], &ftmp[3]) + ty) * sy);
+
+			for (i =0; i < MRDI(&path->npts, &itmp); i++) {
 				pt = &path->pts[i*2];
-                MWRF(&pt[0], (MRDF(&pt[0], &ftmp) + tx) * sx)
-                MWRF(&pt[1], (MRDF(&pt[1], &ftmp) + tx) * sx)
+                MWRF(&pt[0], (MRDF(&pt[0], &ftmp[0]) + tx) * sx)
+                MWRF(&pt[1], (MRDF(&pt[1], &ftmp[1]) + tx) * sx)
 			}
 		}
 
-		if (shape->fill.type == NSVG_PAINT_LINEAR_GRADIENT || shape->fill.type == NSVG_PAINT_RADIAL_GRADIENT) {
+		if (MRDC(&shape->fill.type, &tmp) == NSVG_PAINT_LINEAR_GRADIENT || MRDC(&shape->fill.type, &tmp) == NSVG_PAINT_RADIAL_GRADIENT) {
 			nsvg__scaleGradient(shape->fill.gradient, tx,ty, sx,sy);
 			memcpy(t, shape->fill.gradient->xform, sizeof(float)*6);
 			nsvg__xformInverse(shape->fill.gradient->xform, t);
 		}
-		if (shape->stroke.type == NSVG_PAINT_LINEAR_GRADIENT || shape->stroke.type == NSVG_PAINT_RADIAL_GRADIENT) {
+		if (MRDC(&shape->stroke.type, &tmp) == NSVG_PAINT_LINEAR_GRADIENT || MRDC(&shape->stroke.type, &tmp) == NSVG_PAINT_RADIAL_GRADIENT) {
 			nsvg__scaleGradient(shape->stroke.gradient, tx,ty, sx,sy);
 			memcpy(t, shape->stroke.gradient->xform, sizeof(float)*6);
 			nsvg__xformInverse(shape->stroke.gradient->xform, t);
@@ -2904,10 +2931,14 @@ void nsvgDelete(NSVGimage* image)
 	shape = image->shapes;
 	while (shape != NULL) {
 		snext = shape->next;
-		nsvg__deletePaths(shape->paths);
+		nsvg__deletePaths(shape->paths);  //TODO update?
 		nsvg__deletePaint(&shape->fill);
 		nsvg__deletePaint(&shape->stroke);
+#ifdef USE_MEMUTIL
+        memutil_swap_free(shape);
+#else
 		free(shape);
+#endif
 		shape = snext;
 	}
 	free(image);
