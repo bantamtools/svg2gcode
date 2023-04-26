@@ -137,11 +137,11 @@ typedef struct NSVGpath
 
 typedef struct NSVGshape
 {
-	NSVGpaint fill;				// Fill paint
+	NSVGpaint fill;			    // Fill paint
 	NSVGpaint stroke;			// Stroke paint
 	float opacity;				// Opacity of the shape.
 	float strokeWidth;			// Stroke width (scaled)
-	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
+	float *bounds;//[4];		// Tight bounding box of the shape [minx,miny,maxx,maxy].
 	NSVGpath* paths;			// Linked list of paths in the image.
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
 } NSVGshape;
@@ -911,14 +911,18 @@ static void nsvg__addShape(NSVGparser* p)
 	if (p->plist == NULL)
 		return;
 
-#ifdef USE_MEMUTIL
-	shape = (NSVGshape*)memutil_swap_malloc(sizeof(NSVGshape)); 
-    if (shape == NULL) goto error;
-	memutil_swap_memset(shape, 0, sizeof(NSVGshape));
-#else
 	shape = (NSVGshape*)malloc(sizeof(NSVGshape));
 	if (shape == NULL) goto error;
 	memset(shape, 0, sizeof(NSVGshape));
+
+#ifdef USE_MEMUTIL
+	shape->bounds = (float*)memutil_swap_malloc(4*sizeof(float));
+	if (shape->bounds == NULL) goto error;
+	memutil_swap_memset(shape->bounds, 0, sizeof(4*sizeof(float)));
+#else
+	shape->bounds = (float*)malloc(4*sizeof(float));
+	if (shape->bounds == NULL) goto error;
+	memset(shape->bounds, 0, sizeof(4*sizeof(float)));
 #endif
 
 	scale = nsvg__maxf(fabsf(attr->xform[0]), fabsf(attr->xform[3]));
@@ -928,9 +932,9 @@ static void nsvg__addShape(NSVGparser* p)
     shape->paths = p->plist;
 	p->plist = NULL;
 
-    printf("struct addrs: fill -> %p, stroke -> %p, opacity -> %p, strokeWidth -> %p\r\n", (void*)&shape->fill, (void*)&shape->stroke, (void*)&shape->opacity, (void*)&shape->strokeWidth);
-    printf("bounds[0] -> %p, bounds[1] -> %p, bounds[2] -> %p, bounds[3] -> %p\r\n", (void*)&shape->bounds[0], (void*)&shape->bounds[1], (void*)&shape->bounds[2], (void*)&shape->bounds[3]);
-    printf("paths -> %p, next -> %p\r\n", (void*)shape->paths, (void*)shape->next);
+    //printf("struct addrs: fill -> %p, stroke -> %p, opacity -> %p, strokeWidth -> %p\r\n", (void*)&shape->fill, (void*)&shape->stroke, (void*)&shape->opacity, (void*)&shape->strokeWidth);
+    //printf("bounds[0] -> %p, bounds[1] -> %p, bounds[2] -> %p, bounds[3] -> %p\r\n", (void*)&shape->bounds[0], (void*)&shape->bounds[1], (void*)&shape->bounds[2], (void*)&shape->bounds[3]);
+   // printf("paths -> %p, next -> %p\r\n", shape->paths, shape->next);
 
 	// Calculate shape bounds
     MWRF(&shape->bounds[0], shape->paths->bounds[0]);
