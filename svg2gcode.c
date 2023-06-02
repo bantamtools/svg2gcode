@@ -537,7 +537,7 @@ int longestAxis(float bounds[4]){ //return 0 if X axis larger, return 1 if Y axi
 }
 
 BVHNode* ConstructBVH(NSVGshape **fillShapes, int fillShapeCount, int depth) {
-  printf("ConstructBVH called with depth %d and fillShapeCount %d\n", depth, fillShapeCount);
+  //printf("ConstructBVH called with depth %d and fillShapeCount %d\n", depth, fillShapeCount);
   fflush(stdout);
   BVHNode* node = (BVHNode*) malloc(sizeof(BVHNode));
   if(node == NULL) {
@@ -551,46 +551,46 @@ BVHNode* ConstructBVH(NSVGshape **fillShapes, int fillShapeCount, int depth) {
   node->shape = NULL;
   calcBoundsbvh(fillShapes, node, fillShapeCount);
 
-  printf("Bounds calculated: [%f, %f, %f, %f]\n", node->bounds[0], node->bounds[1], node->bounds[2], node->bounds[3]);
-  fflush(stdout);
+  //printf("Bounds calculated: [%f, %f, %f, %f]\n", node->bounds[0], node->bounds[1], node->bounds[2], node->bounds[3]);
+  //fflush(stdout);
 
   // If there's only one shape left, this is a leaf node.
   if (fillShapeCount == 1) {
     node->shape = fillShapes[0]; // Store the single shape directly
-    printf("Leaf node created with shape\n");
-    fflush(stdout);
+    //printf("Leaf node created with shape\n");
+    //fflush(stdout);
     return node;
   }
 
   // Choose the axis along which to split the shapes
   int axis = longestAxis(node->bounds); // This function will calculate the longest axis from the bounds
-  printf("Longest axis calculated: %d\n", axis);
-  fflush(stdout);
+  // printf("Longest axis calculated: %d\n", axis);
+  // fflush(stdout);
 
   // Sort the shapes along the chosen axis
   if(axis == 0){
     qsort(fillShapes, fillShapeCount, sizeof(NSVGshape*), compareX);
-    printf("Shapes sorted along the X axis\n");
+    //printf("Shapes sorted along the X axis\n");
   } else {
     qsort(fillShapes, fillShapeCount, sizeof(NSVGshape*), compareY);
-    printf("Shapes sorted along the Y axis\n");
+    //printf("Shapes sorted along the Y axis\n");
   }
   fflush(stdout);
 
   // Split the list of shapes into two halves
   int midPoint = fillShapeCount / 2;
-  printf("Midpoint calculated: %d\n", midPoint);
-  fflush(stdout);
+  // printf("Midpoint calculated: %d\n", midPoint);
+  // fflush(stdout);
 
   // Create children nodes
-  printf("Creating left child\n");
-  fflush(stdout);
+  // printf("Creating left child\n");
+  // fflush(stdout);
   node->left = ConstructBVH(fillShapes, midPoint, depth + 1);
-  printf("Creating right child\n");
-  fflush(stdout);
+  // printf("Creating right child\n");
+  // fflush(stdout);
   node->right = ConstructBVH(fillShapes + midPoint, fillShapeCount - midPoint, depth + 1);
 
-  printf("Returning node at depth %d\n", depth);
+  //printf("Returning node at depth %d\n", depth);
   fflush(stdout);
 
   return node;
@@ -846,13 +846,13 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("Constructing bvhTree\n");
   fflush(stdout);
 
-  for (int i = 0; i < fillShapeCount; i++) {
-    for (int j = i+1; j < fillShapeCount; j++) {
-      if (fillShapes[i] == fillShapes[j]) {
-          printf("Duplicate shape found at indices %d and %d: %p\n", i, j, (void*)fillShapes[i]);
-      }
-    }
-  } 
+  // for (int i = 0; i < fillShapeCount; i++) {
+  //   for (int j = i+1; j < fillShapeCount; j++) {
+  //     if (fillShapes[i] == fillShapes[j]) {
+  //         printf("Duplicate shape found at indices %d and %d: %p\n", i, j, (void*)fillShapes[i]);
+  //     }
+  //   }
+  // } 
 
 
   bvhRoot = ConstructBVH(fillShapes, fillShapeCount, 0);
