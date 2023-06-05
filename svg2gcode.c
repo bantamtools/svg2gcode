@@ -810,59 +810,52 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("Number of shapes with fill: %i\n", fillShapeCount);
   fflush(stdout);
 
-  FILE* debug = fopen("debug.txt", "w");
-  if (debug == NULL) {
-      printf("Failed to open file.\n");
-  }
-  printf("Debug.txt created\n");
-  fflush(stdout);
-
-  fillShapes = malloc(fillShapeCount * sizeof(NSVGshape*));
-  if (fillShapes == NULL) {
-      printf("Failed to malloc fillShapes.\n Exiting process\n");
-      fflush(stdout);
-      return -1;
-  }
-
-  shapeCount = 0;
-  int shapeInsert = 0;
-  printf("Constructing array of shapes with fill\n");
-  fflush(stdout);
-  for (iterShape = g_image->shapes; iterShape != NULL; iterShape = iterShape->next) { //Construct array of all shapes with fill in the image. For pre-proc purposes.
-    if(iterShape->fill.color != 0){
-      printf("Fill color when building fill arr: %i\n", iterShape->fill.color);
-      fflush(stdout);
-      fprintf(debug, "Fill Shape %i, Shape #%i: Bounds %f %f %f %f. Fill: %i\n", shapeInsert, shapeCount, iterShape->bounds[0], iterShape->bounds[1], iterShape->bounds[2], iterShape->bounds[3], iterShape->fill.color);
-      fflush(debug);
-      iterShape->id = shapeCount;
-      fillShapes[shapeInsert] = iterShape;
-      shapeInsert++;
+  if(fillShapeCount > 0){ //Only need to construct a bvh and shit if there are any shapes with fill.
+    FILE* debug = fopen("debug.txt", "w");
+    if (debug == NULL) {
+        printf("Failed to open file.\n");
     }
-    shapeCount++;
+    printf("Debug.txt created\n");
+    fflush(stdout);
+
+    fillShapes = malloc(fillShapeCount * sizeof(NSVGshape*));
+    if (fillShapes == NULL) {
+        printf("Failed to malloc fillShapes.\n Exiting process\n");
+        fflush(stdout);
+        return -1;
+    }
+
+    shapeCount = 0;
+    int shapeInsert = 0;
+    printf("Constructing array of shapes with fill\n");
+    fflush(stdout);
+    for (iterShape = g_image->shapes; iterShape != NULL; iterShape = iterShape->next) { //Construct array of all shapes with fill in the image. For pre-proc purposes.
+      if(iterShape->fill.color != 0){
+        printf("Fill color when building fill arr: %i\n", iterShape->fill.color);
+        fflush(stdout);
+        fprintf(debug, "Fill Shape %i, Shape #%i: Bounds %f %f %f %f. Fill: %i\n", shapeInsert, shapeCount, iterShape->bounds[0], iterShape->bounds[1], iterShape->bounds[2], iterShape->bounds[3], iterShape->fill.color);
+        fflush(debug);
+        iterShape->id = shapeCount;
+        fillShapes[shapeInsert] = iterShape;
+        shapeInsert++;
+      }
+      shapeCount++;
+    }
+
+    //fillShapeCount is total num of shapes with fill. shapeCount is total number of shapes. fillShapes is an array of the shapes with fill.
+    printf("Constructing bvhTree\n");
+    fflush(stdout);
+
+    bvhRoot = ConstructBVH(fillShapes, fillShapeCount, 0);
+    printf("bvhTree constructed\n");
+    fflush(stdout);
+
+    writeBVHNodeToFile(bvhRoot, debug, 0);
+
+    fflush(stdout);
+    fclose(debug);
   }
-
-  //fillShapeCount is total num of shapes with fill. shapeCount is total number of shapes. fillShapes is an array of the shapes with fill.
-
-  printf("Constructing bvhTree\n");
-  fflush(stdout);
-
-  // for (int i = 0; i < fillShapeCount; i++) {
-  //   for (int j = i+1; j < fillShapeCount; j++) {
-  //     if (fillShapes[i] == fillShapes[j]) {
-  //         printf("Duplicate shape found at indices %d and %d: %p\n", i, j, (void*)fillShapes[i]);
-  //     }
-  //   }
-  // } 
-
-
-  bvhRoot = ConstructBVH(fillShapes, fillShapeCount, 0);
-  printf("bvhTree constructed\n");
-  fflush(stdout);
-
-  writeBVHNodeToFile(bvhRoot, debug, 0);
-
-  fflush(stdout);
-  fclose(debug);
+  
   #endif
 
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
