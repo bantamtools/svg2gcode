@@ -134,6 +134,7 @@ typedef struct NSVGshape
 	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
 	NSVGpath* paths;			// Linked list of paths in the shape.
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
+	int id;						// Used for debug in construction of bvh tree.
 } NSVGshape;
 
 typedef struct NSVGimage
