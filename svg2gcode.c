@@ -655,11 +655,7 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
       int pointA = rand() % (pathCount - 2);
       int pointB = rand() % (pathCount - 2);
 
-      if(abs(pointB - pointA) < 2) {
-        continue;
-      }
-
-      if(pointB > pathCount -2 || pointA > pathCount-2){ //See if this stops random segfaults?
+      if(abs(pointB - pointA) < 2 || pointB > pathCount -2 || pointA > pathCount-2) { //Edge cases where we dont want to do anything.
         continue;
       }
 
