@@ -1163,6 +1163,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "( Machine Type: %i )\n", machineType);
 #endif
+  fprintf(gcode, "( Generated with Bantam Tools Vector Software Version %d.%d.%d on %s at %s )\n", BTSVG_VERSION_MAJOR, BTSVG_VERSION_MINOR, BTSVG_VERSION_PATCH, __DATE__, __TIME__);
   fprintf(gcode, "( XY Feedrate: %d, Z Feedrate: %d )\n", gcodeState->feed, gcodeState->zFeed);
   fprintf(gcode, "( WriteHeight: %f, TravelHeight: %f )\n", gcodeState->zFloor, gcodeState->ztraverse);
   fprintf(gcode, "( Left Margin: %f, Right Margin, %f, Top Margin: %f, Bottom Margin: %f )\n", settings->xMarginLeft, settings->xMarginRight, settings->yMarginTop, settings->yMarginTop);
