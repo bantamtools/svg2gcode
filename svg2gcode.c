@@ -149,6 +149,7 @@ typedef struct GCodeState {
     int shapeStart;
     float zFloor;
     float ztraverse;
+    float zMid;
     char xy;
     unsigned int currColor;
     unsigned int targetColor;
@@ -966,6 +967,9 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.colorMatch = 0;
   state.toolChangePos = -51.5;
 
+  state.zMid = (state.zFloor - state.ztraverse) * 0.2;
+  state.zMid = state.zFloor - state.zMid;
+
   if(state.quality == 2){
     state.tol = 0.25;
   } else if (state.quality == 1){
@@ -1006,7 +1010,35 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
 }
 
 void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
-  fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, gcodeState->zFeed);
+  int n = 3; //experiment with quantized decell into write.
+  double totalDistance = gcodeState->zFloor - gcodeState->ztraverse;
+  double segmentLength = totalDistance / n;
+
+  // Calculate the decrement for feedrate
+  double feedRateDecrement = (double)(gcodeState->zFeed - 400) / (n - 1);
+  double currentFeedRate = gcodeState->zFeed;
+
+  // Loop to break the movement into n segments
+  double currentZ = gcodeState->ztraverse;
+  for (int i = 0; i < n; i++) {
+      currentZ += segmentLength;
+      
+      // Print the G-code command
+      fprintf(gcode, "G1 Z%f F%.2f\n", currentZ, currentFeedRate);
+      
+      // Decrease the feedrate for the next iteration
+      currentFeedRate -= feedRateDecrement;
+  }
+
+  // Ensure feedrate doesn't go below 200, if there's any rounding error.
+  if (currentFeedRate < 400) {
+      currentFeedRate = 400;
+  }
+
+  // fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zMid, gcodeState->zFeed);
+  // fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, 500);
+  //fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, gcodeState->zFeed);
+  //fprintf(gcode, "G04 P0.01\n"); //Recorded at 960 fps, at 30fps playback, bounce lasted for about 2 seconds (0.0625 seconds in real time), 60/960 = 0.625 + a bit more = .065 dwell for bounce to stop.
 }
 
 void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
