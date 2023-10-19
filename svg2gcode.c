@@ -56,6 +56,7 @@
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
 #define DOUGLAS_PEUCKER_EPSILON 0.05 //in mm
+# define DELTA_LIFT 1
 
 #include <stdio.h>
 #include <math.h>
@@ -1011,15 +1012,15 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
 
 void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
   int n = 3; //experiment with quantized decell into write.
-  double totalDistance = gcodeState->zFloor - gcodeState->ztraverse;
+  double totalDistance = (gcodeState->zFloor) - (gcodeState->ztraverse-DELTA_LIFT);
   double segmentLength = totalDistance / n;
 
   // Calculate the decrement for feedrate
-  double feedRateDecrement = (double)(gcodeState->zFeed - 400) / (n - 1);
+  double feedRateDecrement = (double)(gcodeState->zFeed - 500) / (n - 1);
   double currentFeedRate = gcodeState->zFeed;
 
   // Loop to break the movement into n segments
-  double currentZ = gcodeState->ztraverse;
+  double currentZ = gcodeState->ztraverse-DELTA_LIFT;
   for (int i = 0; i < n; i++) {
       currentZ += segmentLength;
       
@@ -1031,8 +1032,8 @@ void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
   }
 
   // Ensure feedrate doesn't go below 200, if there's any rounding error.
-  if (currentFeedRate < 400) {
-      currentFeedRate = 400;
+  if (currentFeedRate < 500) {
+      currentFeedRate = 500;
   }
 
   // fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zMid, gcodeState->zFeed);
@@ -1042,7 +1043,7 @@ void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
 }
 
 void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
-  fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
+  fprintf(gcode, "G0 Z%f\n", gcodeState->zFloor + DELTA_LIFT);
 }
 
 char* uint_to_hex_string(unsigned int num) {
@@ -1207,7 +1208,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
 
   if(machineType == MACHINE_6COLOR || machineType == MACHINE_MVP_8_5) { //6Color or MVP job paper back and forth.
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
-    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->paperHeight -24)), gcodeState->feedY);
+    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->paperHeight - 50)), gcodeState->feedY);
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
   }
 }
