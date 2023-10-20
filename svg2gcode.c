@@ -56,7 +56,8 @@
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
 #define DOUGLAS_PEUCKER_EPSILON 0.05 //in mm
-# define DELTA_LIFT 1
+#define DELTA_LIFT 1
+#define CONSTRUCT_BVH
 
 #include <stdio.h>
 #include <math.h>
@@ -70,7 +71,7 @@ static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
 static int numTools = 6;
 float bounds[4];
-static int pathCount,pointsCount,shapeCount;
+static int pathCount,pointsCount,shapeCount,fillShapeCount;
 static struct NSVGimage* g_image = NULL;
 int numCompOut = 0;
 int pathCountOut = 0;
@@ -180,6 +181,150 @@ typedef struct GCodeState {
     int colorCount;
     int useToolOffsets;
 } GCodeState;
+
+typedef struct BVHNode { //Used for constructing a Bounding Volume Heirarchy for overlap search optimization.
+    float bounds[4]; // Bounding box of this node [minx, miny, maxx, maxy]
+    NSVGshape* shape; // Shape at this node (NULL if this is not a leaf node). Shapes are contained in leaf nodes, non leaf nodes are considered a minimum bounding box of their children. 
+    struct BVHNode* left; // Left child
+    struct BVHNode* right; // Right child
+} BVHNode;
+
+void calcBoundsbvh(NSVGshape ** fillShapes, BVHNode * node, int fillShapeCount){
+  node->bounds[0] = fillShapes[0]->bounds[0]; //minx
+  node->bounds[1] = fillShapes[0]->bounds[1]; //miny
+  node->bounds[2] = fillShapes[0]->bounds[2]; //maxx
+  node->bounds[3] = fillShapes[0]->bounds[3]; //maxy
+
+  for(int i = 1; i < fillShapeCount; i++){
+    NSVGshape * shape = fillShapes[i];
+    if (shape->bounds[0] < node->bounds[0]) {node->bounds[0] = shape->bounds[0];};
+    if (shape->bounds[1] < node->bounds[1]) {node->bounds[1] = shape->bounds[1];};
+    if (shape->bounds[2] > node->bounds[2]) {node->bounds[2] = shape->bounds[2];};
+    if (shape->bounds[3] > node->bounds[3]) {node->bounds[3] = shape->bounds[3];};
+  }
+}
+
+int compareX(const void* a, const void* b) {
+    NSVGshape* shapeA = *(NSVGshape**)a;
+    NSVGshape* shapeB = *(NSVGshape**)b;
+    float midA = (shapeA->bounds[0] + shapeA->bounds[2]) / 2;
+    float midB = (shapeB->bounds[0] + shapeB->bounds[2]) / 2;
+    if (midA < midB) return -1;
+    if (midA > midB) return 1;
+    return 0;
+}
+
+int compareY(const void* a, const void* b) {
+    NSVGshape* shapeA = *(NSVGshape**)a;
+    NSVGshape* shapeB = *(NSVGshape**)b;
+    float midA = (shapeA->bounds[1] + shapeA->bounds[3]) / 2;
+    float midB = (shapeB->bounds[1] + shapeB->bounds[3]) / 2;
+    if (midA < midB) return -1;
+    if (midA > midB) return 1;
+    return 0;
+}
+
+int longestAxis(float bounds[4]){ //return 0 if X axis larger, return 1 if Y axis larger.
+  return (bounds[2] - bounds[0]) < (bounds[3] - bounds[1]); //x > y
+}
+
+BVHNode* ConstructBVH(NSVGshape **fillShapes, int fillShapeCount, int depth) {
+  //printf("ConstructBVH called with depth %d and fillShapeCount %d\n", depth, fillShapeCount);
+  fflush(stdout);
+  BVHNode* node = (BVHNode*) malloc(sizeof(BVHNode));
+  if(node == NULL) {
+    // Handle memory allocation failure
+    printf("Memory allocation failure for BVHNode\n");
+    fflush(stdout);
+    return NULL;
+  }
+  node->left = NULL;
+  node->right = NULL;
+  node->shape = NULL;
+  calcBoundsbvh(fillShapes, node, fillShapeCount);
+
+  //printf("Bounds calculated: [%f, %f, %f, %f]\n", node->bounds[0], node->bounds[1], node->bounds[2], node->bounds[3]);
+  //fflush(stdout);
+
+  // If there's only one shape left, this is a leaf node.
+  if (fillShapeCount == 1) {
+    node->shape = fillShapes[0]; // Store the single shape directly
+    //printf("Leaf node created with shape\n");
+    //fflush(stdout);
+    return node;
+  }
+
+  // Choose the axis along which to split the shapes
+  int axis = longestAxis(node->bounds); // This function will calculate the longest axis from the bounds
+  // printf("Longest axis calculated: %d\n", axis);
+  // fflush(stdout);
+
+  // Sort the shapes along the chosen axis
+  if(axis == 0){
+    qsort(fillShapes, fillShapeCount, sizeof(NSVGshape*), compareX);
+    //printf("Shapes sorted along the X axis\n");
+  } else {
+    qsort(fillShapes, fillShapeCount, sizeof(NSVGshape*), compareY);
+    //printf("Shapes sorted along the Y axis\n");
+  }
+  fflush(stdout);
+
+  // Split the list of shapes into two halves
+  int midPoint = fillShapeCount / 2;
+  // printf("Midpoint calculated: %d\n", midPoint);
+  // fflush(stdout);
+
+  // Create children nodes
+  // printf("Creating left child\n");
+  // fflush(stdout);
+  node->left = ConstructBVH(fillShapes, midPoint, depth + 1);
+  // printf("Creating right child\n");
+  // fflush(stdout);
+  node->right = ConstructBVH(fillShapes + midPoint, fillShapeCount - midPoint, depth + 1);
+
+  //printf("Returning node at depth %d\n", depth);
+  fflush(stdout);
+
+  return node;
+}
+
+void writeBVHNodeToFile(BVHNode* node, FILE* file, int depth) {
+    if (file == NULL) {
+        printf("File pointer is NULL. Cannot write to file.\n");
+        return;
+    }
+
+    if (node == NULL) {
+        printf("Node pointer is NULL. Cannot write node information.\n");
+        return;
+    }
+
+    // Write indentation corresponding to depth
+    for (int i = 0; i < depth; i++) {
+        fprintf(file, "\t");
+    }
+
+    // Write bounding box
+    fprintf(file, "Node bounds: [%f, %f, %f, %f]", node->bounds[0], node->bounds[1], node->bounds[2], node->bounds[3]);
+
+    // Write shape id if this is a leaf node
+    if (node->shape != NULL) {
+        fprintf(file, ", shape id: %s", node->shape->id);
+    }
+
+    fprintf(file, "\n");  // end of line
+    fflush(file);  // force write to file to see output immediately
+
+    // Recursively write children nodes
+    if (node->left != NULL) {
+        writeBVHNodeToFile(node->left, file, depth + 1);
+    }
+    if (node->right != NULL) {
+        writeBVHNodeToFile(node->right, file, depth + 1);
+    }
+}
+
+//Groundwork for BVH. Need a malloc'd arr of NSVGShape's with fill, as well as a count of them.
 
 SVGPoint bezPoints[MAX_BEZ];
 static int bezCount = 0;
@@ -320,8 +465,15 @@ static void cubicBez(float x1, float y1, float x2, float y2,
 #define RANDOM() (drand48())
 #endif
 
+int hasFill(NSVGshape * shape){ //1 if treated as having fill.
+  if(shape->fill.type == NSVG_PAINT_NONE || shape->fill.type == NSVG_PAINT_UNDEF){
+    return 0;
+  }
+  return 1;
+}
+
 //This needs to be redone.
-static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, FILE* debug) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, NSVGshape* fillShapes, FILE* debug) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   int i, j, k, l, p, b, bezCount;
@@ -331,7 +483,8 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
   j = 0;
   p = 0;
   int shapeCount = 0;
-  for (shape = g_image->shapes; shape != NULL; shape = shape->next) {
+  int fillShapeInsert = 0;
+  for (shape = g_image->shapes; shape != NULL; shape = shape->next) { //ID of our shape type = order encountered.
     for (path = shape->paths; path != NULL; path = path->next) { //For each path in shape.
       shapes[i].id = i;
       shapes[i].stroke = shape->stroke.color;
@@ -364,6 +517,12 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
       }
       state->maxPaths = MAXINT(shapes[i].numToolpaths, state->maxPaths);
       i++;
+      if(hasFill(shape)){
+        fprintf(debug, "    Fill Shape %i, Shape #%i: Bounds %f %f %f %f. Fill: %i\n", fillShapeInsert, shapeCount, shape->bounds[0], shape->bounds[1], shape->bounds[2], shape->bounds[3], shape->fill.type);
+        fflush(debug);
+        fillShapes[fillShapeInsert] = *shape;
+        fillShapeInsert++;
+      }
     }
     j++;
     shapeCount++;
@@ -471,6 +630,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
   pathCount = 0;
   pointsCount = 0;
   shapeCount = 0;
+  fillShapeCount = 0;
   for (shape = image->shapes; shape != NULL; shape = shape->next) { //for all shapes in an image. Color is at this level
     for (path = shape->paths; path != NULL; path = path->next) { //for all path's in a shape. Path's inherit their shape color.
       for (i = 0; i < path->npts-1; i++) { //for all points in a path.
@@ -497,9 +657,13 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
       colorMatch = 0;
     }
     shapeCount++;
+    if(shape->fill.color != 0){
+      fillShapeCount++;
+    }
   }
   printf("pathCount = %d\n", pathCount);
   printf("shapeCount = %d\n",shapeCount);
+  printf("fillShapeCount = %d\n", fillShapeCount);
 }
 
 float svgPointDistance(SVGPoint * p1, SVGPoint * p2) {
@@ -1400,7 +1564,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l; //local iterators with k <= j, l < npaths;
 
-    // printf("Shape %d at i:%d. Color: %i\n", shapes[*i].id, *i, shapes[*i].stroke);
+    fprintf(gcode, "Shape %d at i:%d. Color: %i\n", shapes[*i].id, *i, shapes[*i].stroke);
     // printf("Scale: %f, Rotation: %d, ShiftX: %f, ShiftY: %f\n", settings->scale, settings->svgRotation, settings->shiftX, settings->shiftY);
     
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated.
@@ -1609,6 +1773,11 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
    printf("can't open output %s\n",argv[optind+1]);
    return -1;
  }
+ debug=fopen("debug.txt","w");
+ if(debug == NULL) {
+  printf("failed to open debu.txt\n");
+  return -1;
+ }
 
  char *writeBuffer = malloc(BUFFER_SIZE);
  if(writeBuffer == NULL){
@@ -1630,6 +1799,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   fprintf(gcode, "  ( ShiftX: %f, ShiftY: %f )\n", settings.shiftX, settings.shiftY);
 #endif
 
+
+  NSVGshape* fillShapes;
+  fillShapes = (NSVGshape*)malloc(fillShapeCount*sizeof(NSVGshape));
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   shapes = (Shape*)malloc(pathCount*sizeof(Shape));
@@ -1638,7 +1810,16 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   memset(shapes, 0, pathCount*sizeof(Shape));
   gcodeState.npaths = 0;
 
-  calcPaths(points, toolPaths, &gcodeState, shapes, debug);
+  if(fillShapes == NULL || points == NULL || toolPaths == NULL || shapes == NULL){
+    printf("Malloc failed at gen arrays\n");
+    return -1;
+  } else {
+    printf("Malloc success at gen arrays\n");
+    fflush(stdout);
+  }
+
+  fprintf(debug, "Calc Path's Step\n");
+  calcPaths(points, toolPaths, &gcodeState, shapes, fillShapes, debug);
   //alloc a worst case array for storing calculated draw points
   //malloc for (maxPathsinShape * maxNumberofPointsperBez * xandy * sizeofInt)
   gcodeState.pathPoints = malloc(gcodeState.maxPaths * MAX_BEZ * 2 * sizeof(float)); //points are stored as x on even y on odd, eg point p1 = (pathPoints[0],pathPoints[1]) = (x1,y1)
@@ -1785,6 +1966,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   fflush(stdout);
   fclose(gcode);
+  fclose(debug);
   free(gcodeState.pathPoints);
   free(writeBuffer);
   free(points);
