@@ -473,7 +473,7 @@ int hasFill(NSVGshape * shape){ //1 if treated as having fill.
 }
 
 //This needs to be redone.
-static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, NSVGshape* fillShapes, FILE* debug) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, NSVGshape** fillShapes, FILE* debug) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   int i, j, k, l, p, b, bezCount;
@@ -520,7 +520,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
       if(hasFill(shape)){
         fprintf(debug, "    Fill Shape %i, Shape #%i: Bounds %f %f %f %f. Fill: %i\n", fillShapeInsert, shapeCount, shape->bounds[0], shape->bounds[1], shape->bounds[2], shape->bounds[3], shape->fill.type);
         fflush(debug);
-        fillShapes[fillShapeInsert] = *shape;
+        fillShapes[fillShapeInsert] = shape;
         fillShapeInsert++;
       }
     }
@@ -657,7 +657,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
       colorMatch = 0;
     }
     shapeCount++;
-    if(shape->fill.color != 0){
+    if(hasFill(shape)){
       fillShapeCount++;
     }
   }
@@ -1800,8 +1800,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 #endif
 
 
-  NSVGshape* fillShapes;
-  fillShapes = (NSVGshape*)malloc(fillShapeCount*sizeof(NSVGshape));
+  NSVGshape** fillShapes;
+  fillShapes = (NSVGshape**)malloc(fillShapeCount*sizeof(NSVGshape*));
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   shapes = (Shape*)malloc(pathCount*sizeof(Shape));
@@ -1828,6 +1828,20 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("Memory allocation failed!\n");
     exit(1);
   }
+
+  fprintf(debug, "Post Calc Path's fillShapes\n");
+  for(int i = 0; i < fillShapeCount; i++){
+    fprintf(debug, "    Shape #%s: Bounds %f %f %f %f. Fill: %i\n", fillShapes[i]->id, fillShapes[i]->bounds[0], fillShapes[i]->bounds[1], fillShapes[i]->bounds[2], fillShapes[i]->bounds[3], fillShapes[i]->fill.type);
+  }
+
+  //BUILD BVH FOR FILL SHAPES
+  printf("Constructing BVH\n");
+  int bvhDepth = 0;
+  BVHNode* bvhRoot = ConstructBVH(fillShapes, fillShapeCount, bvhDepth);
+  printf("Contructed BVH\n");
+
+  bvhDepth = 0;
+  writeBVHNodeToFile(bvhRoot, debug, bvhDepth);
 
   //Simulated annealing implementation for path optimization.
   srand(time(0));
