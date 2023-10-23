@@ -1207,7 +1207,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
 
   if(machineType == MACHINE_6COLOR || machineType == MACHINE_MVP_8_5) { //6Color or MVP job paper back and forth.
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
-    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->paperHeight -24)), gcodeState->feedY);
+    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->paperHeight -40)), gcodeState->feedY);
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
   }
 }
