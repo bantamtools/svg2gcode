@@ -1357,7 +1357,8 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
         toolDown(color_gcode, gcodeState, machineType);
       }
     }
-    if(lastPoint(sp, ptIndex, pathPointIndex) && (writeReason != 0)){
+    //if(lastPoint(sp, ptIndex, pathPointIndex) && (writeReason != 0)){
+    if(lastPoint(sp, ptIndex, pathPointIndex)){
       toolUp(gcode, gcodeState, machineType);
       if(gcodeState->colorFileOpen && gcodeState->colorToFile){
         toolUp(color_gcode, gcodeState, machineType);
