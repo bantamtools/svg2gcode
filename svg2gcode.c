@@ -178,6 +178,7 @@ typedef struct GCodeState {
     int colorFileOpen;
     int colorCount;
     int useToolOffsets;
+    int zDebounce;
 } GCodeState;
 
 SVGPoint bezPoints[MAX_BEZ];
@@ -941,6 +942,7 @@ void printGCodeState(GCodeState* state) {
   printf("colorCount: %d\n", state->colorCount);
   printf("colorToFile: %d\n", state->colorToFile);
   printf("useToolOffsets: %d\n", state->useToolOffsets);
+  printf("zDebounce: %d\n", state->zDebounce);
   printf("\n");  // End with newline
 }
 
@@ -966,6 +968,7 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.currTool = -1;
   state.colorMatch = 0;
   state.toolChangePos = -51.5;
+  state.zDebounce = generationConfig[13];
 
   state.zMid = (state.zFloor - state.ztraverse) * 0.2;
   state.zMid = state.zFloor - state.zMid;
@@ -1010,34 +1013,35 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
 }
 
 void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
-  int n = 3; //experiment with quantized decell into write.
-  double totalDistance = gcodeState->zFloor - gcodeState->ztraverse;
-  double segmentLength = totalDistance / n;
+  if(gcodeState->zDebounce){
+    int n = 3; //experiment with quantized decell into write.
+    double totalDistance = gcodeState->zFloor - gcodeState->ztraverse;
+    double segmentLength = totalDistance / n;
 
-  // Calculate the decrement for feedrate
-  double feedRateDecrement = (double)(gcodeState->zFeed - 400) / (n - 1);
-  double currentFeedRate = gcodeState->zFeed;
+    // Calculate the decrement for feedrate
+    double feedRateDecrement = (double)(gcodeState->zFeed - 400) / (n - 1);
+    double currentFeedRate = gcodeState->zFeed;
 
-  // Loop to break the movement into n segments
-  double currentZ = gcodeState->ztraverse;
-  for (int i = 0; i < n; i++) {
-      currentZ += segmentLength;
-      
-      // Print the G-code command
-      fprintf(gcode, "G1 Z%f F%.2f\n", currentZ, currentFeedRate);
-      
-      // Decrease the feedrate for the next iteration
-      currentFeedRate -= feedRateDecrement;
+    // Loop to break the movement into n segments
+    double currentZ = gcodeState->ztraverse;
+    for (int i = 0; i < n; i++) {
+        currentZ += segmentLength;
+        
+        // Print the G-code command
+        fprintf(gcode, "G1 Z%f F%.2f\n", currentZ, currentFeedRate);
+        
+        // Decrease the feedrate for the next iteration
+        currentFeedRate -= feedRateDecrement;
+    }
+
+    // Ensure feedrate doesn't go below 200, if there's any rounding error.
+    if (currentFeedRate < 400) {
+        currentFeedRate = 400;
+    }
+  } else {
+    fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, gcodeState->zFeed);
   }
-
-  // Ensure feedrate doesn't go below 200, if there's any rounding error.
-  if (currentFeedRate < 400) {
-      currentFeedRate = 400;
-  }
-
-  // fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zMid, gcodeState->zFeed);
-  // fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, 500);
-  //fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, gcodeState->zFeed);
+  
   //fprintf(gcode, "G04 P0.01\n"); //Recorded at 960 fps, at 30fps playback, bounce lasted for about 2 seconds (0.0625 seconds in real time), 60/960 = 0.625 + a bit more = .065 dwell for bounce to stop.
 }
 
