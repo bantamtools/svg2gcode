@@ -44,6 +44,7 @@
 #include "svg2gcode.h"
 #include "dynamicShapeArray.h"
 #include "boundingViewHierarchy.h"
+#include "transformSettings.h"
 
 //#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
@@ -94,50 +95,15 @@ typedef struct {
 
 typedef struct {
   float points[8];
-  int shape; //corresponds to a shape id. 
+  int shape; //corresponds to a shape id, as defined in the Shape datastructure. Want to refactor this to use shape ID's from NSVGShape.
   char closed;
 } ToolPath;
 
 typedef struct {
-  int id;
+  int id; //This is the integer based on order it is encountered in the document. This needs a rework.
   int numToolpaths;
   unsigned int stroke;
 } Shape;
-
-typedef struct TransformSettings {
-    float scale;
-    float pointsToDocumentScale;
-    float drawingWidth;
-    float drawingHeight;
-    float drawSpaceWidth;
-    float drawSpaceHeight;
-    float loadedFileWidth;
-    float loadedFileHeight;
-    float xInsetLeft;
-    float yInsetTop;
-    float xInsetRight;
-    float yInsetBottom;
-    float shiftX;
-    float shiftY;
-    float centerX;
-    float centerY;
-    float originalCenterX;
-    float originalCenterY;
-    float cosRot;
-    float sinRot;
-    float xMarginLeft;
-    float xMarginRight;
-    float yMarginTop;
-    float yMarginBottom;
-    int fitToMaterial;
-    int centerOnMaterial;
-    int swapDim;
-    int svgRotation;
-    int contentsToDrawspace;
-    float* pointBounds;
-    float paperWidth;
-    float paperHeight;
-} TransformSettings;
 
 typedef struct GCodeState {
     int npaths;
@@ -376,7 +342,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
       state->maxPaths = MAXINT(shapes[i].numToolpaths, state->maxPaths);
       i++;
       if(hasFill(shape) && (fillShapeInsert < fillShapeCount)){
-        fprintf(debug, "    Fill Shape %i, Shape #%i: Bounds %f %f %f %f. Fill: %i\n", fillShapeInsert, shapeCount, shape->bounds[0], shape->bounds[1], shape->bounds[2], shape->bounds[3], shape->fill.type);
+        fprintf(debug, "    Fill Shape %i, Shape ID: %s, Bounds %f %f %f %f. Fill: %i\n", fillShapeInsert, shape->id, shape->bounds[0], shape->bounds[1], shape->bounds[2], shape->bounds[3], shape->fill.type);
         fflush(debug);
         if(addToDynamicShapeArray(fillShapes, shape) < 0){
           printf("Failed to add shape to fillShapes");
@@ -741,199 +707,6 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   fflush(stdout);
 }
 
-TransformSettings calculateScaleForContentsToDrawspace(TransformSettings settings, float* bounds, float pointsWidth, float pointsHeight) {
-    // code specific for contentsToDrawspace
-    printf("Forcing scale to drawSpace\n");
-    //settings.scale = 1;
-    
-    printf("    Unscaled Points width:%f, Points height:%f\n", pointsWidth, pointsHeight);
-    float pointsRatio = pointsWidth / pointsHeight;
-    float drawSpaceRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
-    settings.scale = (drawSpaceRatio > pointsRatio) ? (settings.drawSpaceHeight / pointsHeight) : (settings.drawSpaceWidth / pointsWidth);
-    return settings;
-}
-
-TransformSettings calculateScaleForFitToMaterial(TransformSettings settings) {
-    // code specific for fitToMaterial
-    printf("FitToMat\n");
-    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
-    float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight;
-    settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
-    return settings;
-}
-
-TransformSettings calculateScaleForNotFitToMaterial(TransformSettings settings) {
-    // code specific for !fitToMaterial
-    printf("Not FitToMat\n");
-    settings.scale = 1;
-    return settings;
-}
-
-TransformSettings calcShiftAndCenter(TransformSettings settings) {
-    printf("loadedFileWidth: %f loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-    printf("scale: %f\n", settings.scale);
-    printf("xMarginLeft: %f, yMarginTop: %f\n", settings.xMarginLeft, settings.xMarginRight);
-    //Use shifts in centerX and centerY calculations, not originalCenterX/Y calculations.
-
-    //Calculating TARGET centerpoint for final drawing.
-    if(settings.centerOnMaterial){ //Center on material forces center of svg to center of draw space.
-      printf("Settings.centerOnMaterial == 1\n");
-      settings.centerX = settings.xMarginLeft + settings.drawSpaceWidth/2;
-      settings.centerY = settings.yMarginTop + settings.drawSpaceHeight/2;
-    } else { //If not centering the final point on material, centerpoint should be shift positions + 1/2 dimension.
-             //Loaded file dimensions have already been scaled so this shoudl work for scaled coordinates.
-      printf("Settings.centerOnMaterial == 0\n");
-      settings.centerX = settings.xMarginLeft + (settings.loadedFileWidth/2 * settings.scale);
-      settings.centerY = settings.yMarginTop + (settings.loadedFileHeight/2 * settings.scale);
-    }
-    
-    //REDO BELOW
-    //FINDING CENTERPOINT OF PARSED DOCUMENT.
-    settings.originalCenterX = settings.loadedFileWidth/2;
-    settings.originalCenterY = settings.loadedFileHeight/2;
-    if(settings.swapDim){
-      float tempCent = settings.originalCenterX;
-      settings.originalCenterX = settings.originalCenterY;
-      settings.originalCenterY = tempCent;
-    }
-
-    //REDO
-
-    //original centerX and original centerY are the points at which the scaled and shifted values are centered around
-    //before the rotation is applied. These may be the same as the final center points too (as in the case where center
-    //on material is true). Need a separate calc for centerX and centerY for correct translation back?
-    printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
-    printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
-    fflush(stdout);
-
-    settings.cosRot = cos((90 * settings.svgRotation) * (M_PI / 180)); 
-    settings.sinRot = sin((90 * settings.svgRotation) * (M_PI / 180));
-
-    printf("CosRot: %f, SinRot: %f\n", settings.cosRot, settings.sinRot);
-
-    return settings;
-}
-
-//All calculations for shift and rotation are handled here.
-TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
-  TransformSettings settings;
-
-  //Width and height of the document in mm.
-  settings.contentsToDrawspace = generationConfig[10];
-  float width = paperDimensions[9];
-  float height = paperDimensions[10];
-  settings.paperWidth = paperDimensions[0];
-  settings.paperHeight = paperDimensions[1];
-  settings.pointsToDocumentScale = 1;
-
-  settings.loadedFileWidth = width; //Width and height of svg from frontend.
-  settings.loadedFileHeight = height;
-  settings.svgRotation = generationConfig[2]; //Rotation amount /90
-  settings.xMarginLeft = paperDimensions[2]; //Margins
-  settings.yMarginTop = paperDimensions[3];
-  settings.xMarginRight = paperDimensions[7];
-  settings.yMarginBottom = paperDimensions[8];
-  settings.drawSpaceWidth = paperDimensions[0] - settings.xMarginLeft - settings.xMarginRight; //Amount of space for drawing.
-  settings.drawSpaceHeight = paperDimensions[1] - settings.yMarginTop - settings.yMarginBottom;
-  settings.pointBounds = bounds; //[xmin, ymin, xmax, ymax] bounding box of points in doc.
-  //bounds of points
-  
-  printf("Viewbox info from g_image: viewMinx: %f, viewMiny: %f, viewWidth: %f, viewHeight: %f, alignType: %d\n", g_image->viewMinx, g_image->viewMiny, g_image->viewWidth, g_image->viewHeight, g_image->alignType);
-  printf("Image width:%f, Image Height:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-  printf("PaperDimensions X:%f, PaperDimension Y:%f\n",paperDimensions[0], paperDimensions[1]);
-  printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
-
-  settings.swapDim = ((generationConfig[2]%2) == 1);
-
-  float pointsWidth = bounds[2] - bounds[0];
-  float pointsHeight = bounds[3] - bounds[1];
-  if (settings.contentsToDrawspace){
-    settings.loadedFileWidth = pointsWidth;
-    settings.loadedFileHeight = pointsHeight;
-  }
-
-  // Swap width and height if necessary. Need to calc this for contentsToDrawspace outside of the scale calc function.
-  if (settings.swapDim) {
-    float temp = settings.loadedFileWidth;
-    settings.loadedFileWidth = settings.loadedFileHeight;
-    settings.loadedFileHeight = temp;
-    printf("Swapped image width:%f Image Height:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-  }
-
-  //assume g_image->alignType = 0 for now. Currently inset values are not scaled to paper dimensions.
-  settings.xInsetLeft = bounds[0] - g_image->viewMinx; // Left side of point bounding box distance from viewbox
-  settings.xInsetRight = (g_image->width) - bounds[2]; // Right side
-  settings.yInsetTop = bounds[1] - g_image->viewMiny; // Top side
-  settings.yInsetBottom = (g_image->height) - bounds[3]; // Bottom side
-
-  for (int i = 0; i < settings.svgRotation; i++) {
-    float tempInset = settings.xInsetLeft;
-    settings.xInsetLeft = settings.yInsetBottom;
-    settings.yInsetBottom = settings.xInsetRight;
-    settings.xInsetRight = settings.yInsetTop;
-    settings.yInsetTop = tempInset;
-  }
-
-  // Determine if fitting to material is necessary
-  // If file is too large, or we selected to fitToMaterial.
-  settings.fitToMaterial = ((settings.loadedFileWidth > settings.drawSpaceWidth) || (settings.loadedFileHeight > settings.drawSpaceHeight) || generationConfig[0]); 
-  printf("Fit to material: %d\n", settings.fitToMaterial);
-  settings.centerOnMaterial = generationConfig[1];
-  //SCALE CALCULATIONS
-
-  if (settings.contentsToDrawspace) {
-    printf("CALC CONTENTS TO DRAWSPACE\n");
-    settings = calculateScaleForContentsToDrawspace(settings, bounds, settings.loadedFileWidth, settings.loadedFileHeight);
-  } else if (settings.fitToMaterial) { //If fit to material is toggled or SVG is larger than draw space.
-    printf("CALC FIT TO MAT\n");
-    settings = calculateScaleForFitToMaterial(settings);
-  } else {
-    settings = calculateScaleForNotFitToMaterial(settings);
-  }
-
-  //END SCALE CALCULATIONS
-  printf("    Scale%f\n", settings.scale);
-  settings = calcShiftAndCenter(settings);
-  
-  return settings;
-}
-
-void printTransformSettings(TransformSettings settings) {
-  printf("Point Bounds\n");
-  for(int i = 0; i < 4; i++){
-    printf("    Bounds[%d] = %f\n", i, bounds[i]);
-  }
-  printf("\nscale: %f\n", settings.scale);
-  printf("pointsToDocumentScale: %f\n", settings.pointsToDocumentScale);
-  printf("drawingWidth: %f\n", settings.loadedFileWidth);
-  printf("drawingHeight: %f\n", settings.loadedFileHeight);
-  printf("drawSpaceWidth: %f\n", settings.drawSpaceWidth);
-  printf("drawSpaceHeight: %f\n", settings.drawSpaceHeight);
-  printf("loadedFileWidth: %f\n", settings.loadedFileWidth);
-  printf("loadedFileHeight: %f\n", settings.loadedFileHeight);
-  printf("shiftX: %f\n", settings.shiftX);
-  printf("shiftY: %f\n", settings.shiftY);
-  printf("centerX: %f\n", settings.centerX);
-  printf("centerY: %f\n", settings.centerY);
-  printf("originalCenterX: %f\n", settings.originalCenterX);
-  printf("originalCenterY: %f\n", settings.originalCenterY);
-  printf("cosRot: %f\n", settings.cosRot);
-  printf("sinRot: %f\n", settings.sinRot);
-  printf("xmarginleft: %f\n", settings.xMarginLeft);
-  printf("xmarginright: %f\n", settings.xMarginRight);
-  printf("ymargintop: %f\n", settings.yMarginTop);
-  printf("ymarginbottom: %f\n", settings.yMarginBottom);
-  printf("xInsetLeft: %f\n", settings.xInsetLeft);
-  printf("xInsetRight: %f\n", settings.xInsetRight);
-  printf("yInsetTop: %f\n", settings.yInsetTop);
-  printf("yInsetBottom: %f\n", settings.yInsetBottom);
-  printf("fitToMaterial: %d\n", settings.fitToMaterial);
-  printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
-  printf("swapDim: %d\n", settings.swapDim);
-  printf("svgRotation: %d\n", settings.svgRotation);
-  printf("contentsToDrawspace: %d\n\n", settings.contentsToDrawspace);
-}
-
 void printGCodeState(GCodeState* state) {
   printf("\n");  // Start with newline
   printf("npaths: %d\n", state->npaths);
@@ -1279,7 +1052,7 @@ float rotateY(TransformSettings* settings, float x, float y) {
 }
 
 //Rotation/shift application, and writing is handled in this function.
-void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, BVHNode * bvh, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex, int* pointsWritten) {
+void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, BVHNode * bvh, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex, int* pointsWritten, int* i, int* k) {
     float feedRate;
     float dist = 0.0;
     
@@ -1320,7 +1093,7 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
       gcodeState->y = y;
       dist = distanceBetweenPoints(gcodeState->xold, gcodeState->yold, x, y);
 
-      if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Point check logic.
+      if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Pointlogic.
         gcodeState->trackedDist += dist;
         if(gcodeState->trackedDist >= gcodeState->brushDist){ 
           gcodeState->tempx = gcodeState->xold;
@@ -1492,12 +1265,12 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     if(sp){ //If endpoint is closer.
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
         // Print out point before writing
-        writePoint(gcode, color_gcode, gcodeState, settings, bvh, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
+        writePoint(gcode, color_gcode, gcodeState, settings, bvh, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten, i, k);
       }
     } else { //If start point is closer.
       for(int z = 0; z < pathPointsIndex; z += 2){
         // Print out point before writing
-        writePoint(gcode, color_gcode, gcodeState, settings, bvh, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
+        writePoint(gcode, color_gcode, gcodeState, settings, bvh, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten, i, k);
       }
     }
 #ifdef DEBUG_OUTPUT
@@ -1622,7 +1395,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //
   calcBounds(g_image, numTools, penList, penColorCount);
   //Settings and calculations for rotation + transformation.
-  TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig);
+  TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig, bounds);
   printTransformSettings(settings);
   fflush(stdout);
 
