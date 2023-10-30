@@ -331,7 +331,7 @@ int hasFill(NSVGshape * shape){ //1 if treated as having fill.
 }
 
 //This needs to be redone.
-static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, NSVGshape** fillShapes, FILE* debug) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, DynamicShapeArray* fillShapes, FILE* debug) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   int i, j, k, l, p, b, bezCount;
@@ -378,8 +378,9 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
       if(hasFill(shape) && (fillShapeInsert < fillShapeCount)){
         fprintf(debug, "    Fill Shape %i, Shape #%i: Bounds %f %f %f %f. Fill: %i\n", fillShapeInsert, shapeCount, shape->bounds[0], shape->bounds[1], shape->bounds[2], shape->bounds[3], shape->fill.type);
         fflush(debug);
-        fillShapes[fillShapeInsert] = shape;
-        fillShapeInsert++;
+        if(addToDynamicShapeArray(fillShapes, shape) < 0){
+          printf("Failed to add shape to fillShapes");
+        }
       }
     }
     j++;
@@ -1658,10 +1659,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 #endif
 
 
-  NSVGshape** fillShapes;
-  if(fillShapeCount >0){
-      fillShapes = (NSVGshape**)malloc(fillShapeCount*sizeof(NSVGshape*));
-  }
+  DynamicShapeArray *fillShapes = createDynamicShapeArray();
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   shapes = (Shape*)malloc(pathCount*sizeof(Shape));
@@ -1691,16 +1689,22 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   BVHNode* bvhRoot;
 
-  if(fillShapeCount >0){
+  if(fillShapes->size > 0){
     fprintf(debug, "Post Calc Path's fillShapes\n");
-    for(int i = 0; i < fillShapeCount; i++){
-      fprintf(debug, "    Shape #%s: Bounds %f %f %f %f. Fill: %i\n", fillShapes[i]->id, fillShapes[i]->bounds[0], fillShapes[i]->bounds[1], fillShapes[i]->bounds[2], fillShapes[i]->bounds[3], fillShapes[i]->fill.type);
-    }
+    for (int i = 0; i < fillShapes->size; i++) {
+      fprintf(debug, "    Shape #%s: Bounds %f %f %f %f. Fill: %i\n",
+        fillShapes->items[i]->id,
+        fillShapes->items[i]->bounds[0],
+        fillShapes->items[i]->bounds[1],
+        fillShapes->items[i]->bounds[2],
+        fillShapes->items[i]->bounds[3],
+        fillShapes->items[i]->fill.type);
+      }
 
     //BUILD BVH FOR FILL SHAPES
     printf("Constructing BVH\n");
     int bvhDepth = 0;
-    bvhRoot = ConstructBVH(fillShapes, fillShapeCount, bvhDepth);
+    bvhRoot = ConstructBVH(fillShapes->items, fillShapes->size, bvhDepth);
     printf("Contructed BVH\n");
 
     bvhDepth = 0;
