@@ -1853,7 +1853,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   fclose(debug);
   if(fillShapes->size > 0){
     FreeBVH(bvhRoot);
-    freeDynamicShapeArray(fillShapes)
+    freeDynamicShapeArray(fillShapes);
   }
   free(gcodeState.pathPoints);
   free(writeBuffer);
