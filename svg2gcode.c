@@ -1851,8 +1851,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   fflush(stdout);
   fclose(gcode);
   fclose(debug);
-  if(fillShapeCount > 0){
+  if(fillShapes->size > 0){
     FreeBVH(bvhRoot);
+    freeDynamicShapeArray(fillShapes)
   }
   free(gcodeState.pathPoints);
   free(writeBuffer);
