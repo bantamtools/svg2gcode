@@ -968,7 +968,7 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.currTool = -1;
   state.colorMatch = 0;
   state.toolChangePos = -51.5;
-  state.zDebounce = generationConfig[13];
+  state.zDebounce = generationConfig[14];
 
   state.zMid = (state.zFloor - state.ztraverse) * 0.2;
   state.zMid = state.zFloor - state.zMid;
@@ -1528,7 +1528,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[14], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[15], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
@@ -1664,8 +1664,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   clock_t start_sa, stop_sa;
   double reorder_time;
 
-  int reorder_paths = generationConfig[12];
-  int reorder_colors = generationConfig[13];
+  int reorder_paths = generationConfig[13];
+  int reorder_colors = generationConfig[12];
 
   if(reorder_paths){
     printf("Paths %d Points %d\n",pathCount, pointsCount);
