@@ -134,3 +134,19 @@ void FreeBVH(BVHNode* node) {
     
     free(node);
 }
+
+void searchBVH(BVHNode *node, float x, float y, DynamicShapeArray *dynamicArray) {
+    if (!node) return;
+
+    // Check if the current node's bounding box contains the point
+    if (x >= node->bounds[0] && x <= node->bounds[2] && y >= node->bounds[1] && y <= node->bounds[3]) {
+        if (node->shape != NULL) {
+            // If it's a leaf node and contains the point, add the shape to the dynamic array
+            addToDynamicShapeArray(dynamicArray, node->shape);
+        } else {
+            // Otherwise, check both children
+            searchBVH(node->left, x, y, dynamicArray);
+            searchBVH(node->right, x, y, dynamicArray);
+        }
+    }
+}

@@ -6,6 +6,7 @@
 #endif
 
 #include "stdio.h"
+#include "dynamicShapeArray.h"
 
 typedef struct BVHNode {
     float bounds[4];       // Bounding box of this node [minx, miny, maxx, maxy]
@@ -17,5 +18,6 @@ typedef struct BVHNode {
 BVHNode* ConstructBVH(NSVGshape **fillShapes, int fillShapeCount, int depth);
 void FreeBVH(BVHNode* node);
 void writeBVHNodeToFile(BVHNode* node, FILE* file, int depth);
+void searchBVH(BVHNode *node, float x, float y, DynamicShapeArray *dynamicArray);
 
 #endif // BVH_H

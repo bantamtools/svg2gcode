@@ -1279,7 +1279,7 @@ float rotateY(TransformSettings* settings, float x, float y) {
 }
 
 //Rotation/shift application, and writing is handled in this function.
-void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex, int* pointsWritten) {
+void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, BVHNode * bvh, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex, int* pointsWritten) {
     float feedRate;
     float dist = 0.0;
     
@@ -1303,6 +1303,14 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Scaled and Rotated X:%f Y:%f , Scale: %f, CenterX: %f, CenterY: %f )\n", x, y, settings->scale, settings->centerX, settings->centerY);
 #endif
+    int shapeOcclusion = 1;
+    //Currently here, they will collide with themselves. We also need to check collosion from old point to new point, so searchBVH needs to somehow use both start and end point.
+    DynamicShapeArray* potentialCollisions = createDynamicShapeArray();
+    if(shapeOcclusion && (potentialCollisions != NULL)){
+      //finds collisions with unscaled x and y points. BVH points are unscaled and unrotated. Points in gcodeState->pathPoints are also unscaled and unrotated.
+      searchBVH(bvh, gcodeState->pathPoints[*ptIndex], gcodeState->pathPoints[(*ptIndex)+1], potentialCollisions);
+      printf("%zu Potential Collisions\n", potentialCollisions->size);
+    }
     
     //Points have been scaled and rotated by this point.
     if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &x, &y, gcode, &writeReason)){ //Can write, if first or last in shape, or if dist is large enough.
@@ -1350,18 +1358,12 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 
       if (firstPoint(sp, ptIndex, pathPointIndex) == 0) { //If not first point
         *pointsWritten += 1;
-#ifdef DEBUG_OUTPUT
-        //fprintf(gcode, "( Writing point with ptIndex: %d, pathPointIndex: %d, X: %.4f, Y: %.4f )\n", *ptIndex, *pathPointIndex, gcodeState->x, gcodeState->y);
-#endif
         fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
         if(gcodeState->colorToFile && gcodeState->colorFileOpen){
           fprintf(color_gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
         }
       } else { //if is first point
         *pointsWritten += 1;
-#ifdef DEBUG_OUTPUT
-        //fprintf(gcode, "( Writing first point with ptIndex: %d, pathPointIndex: %d, X: %.4f, Y: %.4f )\n", *ptIndex, *pathPointIndex, gcodeState->x, gcodeState->y);
-#endif
         fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
         if(gcodeState->colorToFile && gcodeState->colorFileOpen){
           fprintf(color_gcode, "G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
@@ -1387,6 +1389,7 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
         toolUp(color_gcode, gcodeState, machineType);
       }
     }
+    freeDynamicShapeArray(potentialCollisions);
   }
 
 int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *settings, int pathPointsIndex) {
@@ -1419,7 +1422,7 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
     return res;
 }
 
-void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
+void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, BVHNode * bvh, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l; //local iterators with k <= j, l < npaths;
 
@@ -1489,12 +1492,12 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     if(sp){ //If endpoint is closer.
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
         // Print out point before writing
-        writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
+        writePoint(gcode, color_gcode, gcodeState, settings, bvh, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
       }
     } else { //If start point is closer.
       for(int z = 0; z < pathPointsIndex; z += 2){
         // Print out point before writing
-        writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
+        writePoint(gcode, color_gcode, gcodeState, settings, bvh, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
       }
     }
 #ifdef DEBUG_OUTPUT
@@ -1829,7 +1832,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, shapes, &i);
 
     //WRITING MOVES FOR DRAWING 
-    writeShape(gcode, color_gcode, &gcodeState, &settings, shapes, toolPaths, &machineType, &k, &i);
+    writeShape(gcode, color_gcode, &gcodeState, &settings, bvhRoot ,shapes, toolPaths, &machineType, &k, &i);
   }
   
   writeFooter(&gcodeState, gcode, machineType);
