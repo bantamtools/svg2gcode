@@ -3,7 +3,7 @@ GCC = clang
 CFLAGS = -Ofast -v -mlongcalls
 
 # Object files
-OBJS = svg2gcode.o boundingViewHierarchy.o dynamicShapeArray.o transformSettings.o
+OBJS = svg2gcode.o boundingViewHierarchy.o dynamicShapeArray.o transformSettings.o vector.o
 
 # Default target
 all: release
@@ -23,7 +23,7 @@ libsvg2gcode.a: $(OBJS)
 	xtensa-esp32s3-elf-ar rcs libsvg2gcode.a $(OBJS)
 
 # Individual object files
-svg2gcode.o: svg2gcode.c nanosvg.h boundingViewHierarchy.h dynamicShapeArray.h transformSettings.h
+svg2gcode.o: svg2gcode.c nanosvg.h boundingViewHierarchy.h dynamicShapeArray.h transformSettings.h vector.h
 	$(GCC) $(CFLAGS) -c svg2gcode.c
 
 boundingViewHierarchy.o: boundingViewHierarchy.c boundingViewHierarchy.h
@@ -32,8 +32,11 @@ boundingViewHierarchy.o: boundingViewHierarchy.c boundingViewHierarchy.h
 dynamicShapeArray.o: dynamicShapeArray.c dynamicShapeArray.h
 	$(GCC) $(CFLAGS) -c dynamicShapeArray.c
 
-transformSettings.o: transformSettings.c transformSettings.c
+transformSettings.o: transformSettings.c transformSettings.h
 	$(GCC) $(CFLAGS) -c transformSettings.c
+
+vector.o: vector.c vector.h
+	$(GCC) $(CFLAGS) -c vector.c
 
 # Clean up
 clean:

@@ -45,6 +45,7 @@
 #include "dynamicShapeArray.h"
 #include "boundingViewHierarchy.h"
 #include "transformSettings.h"
+#include "vector.h"
 
 //#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
@@ -1434,6 +1435,22 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   fprintf(gcode, "  ( ShiftX: %f, ShiftY: %f )\n", settings.shiftX, settings.shiftY);
 #endif
 
+  Vector nsvg_shape_ptr_vector;
+  vector_init(&nsvg_shape_ptr_vector, sizeof(NSVGshape*));
+
+  fprintf(debug, "Shapes in vector struct\n");
+  NSVGshape* debugShape;
+  NSVGshape* retrievedShape;
+  for(debugShape = g_image->shapes; debugShape != NULL; debugShape = debugShape->next){
+    vector_add(&nsvg_shape_ptr_vector, debugShape);
+     size_t lastIndex = nsvg_shape_ptr_vector.size - 1;
+    // Retrieve the element from the vector
+    retrievedShape = (NSVGshape *)vector_get(&nsvg_shape_ptr_vector, lastIndex);
+    if (retrievedShape) {
+        // Print the index and the shape's id to the file
+        fprintf(debug, "\tIndex: %zu, ID: %s\n", lastIndex, retrievedShape->id);
+    }
+  }
 
   DynamicShapeArray *fillShapes = createDynamicShapeArray();
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
