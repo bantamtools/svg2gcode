@@ -104,6 +104,8 @@ typedef struct {
   int id; //This is the integer based on order it is encountered in the document. This needs a rework.
   int numToolpaths;
   unsigned int stroke;
+  ToolPath* toolpaths;
+  NSVGshape* nsvgShape;
 } Shape;
 
 typedef struct GCodeState {
@@ -313,6 +315,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
     for (path = shape->paths; path != NULL; path = path->next) { //For each path in shape.
       shapes[i].id = i;
       shapes[i].stroke = shape->stroke.color;
+      shapes[i].nsvgShape = shape;
       for (j = 0; j < path->npts - 1; j += 3) { //iterates through all the paths in a single shape.
         float* pp = &path->pts[j * 2];
         if (j == 0) {
@@ -1435,22 +1438,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   fprintf(gcode, "  ( ShiftX: %f, ShiftY: %f )\n", settings.shiftX, settings.shiftY);
 #endif
 
-  Vector nsvg_shape_ptr_vector;
-  vector_init(&nsvg_shape_ptr_vector, sizeof(NSVGshape*));
+  //Testing custom vector here :)
 
-  fprintf(debug, "Shapes in vector struct\n");
-  NSVGshape* debugShape;
-  NSVGshape* retrievedShape;
-  for(debugShape = g_image->shapes; debugShape != NULL; debugShape = debugShape->next){
-    vector_add(&nsvg_shape_ptr_vector, debugShape);
-     size_t lastIndex = nsvg_shape_ptr_vector.size - 1;
-    // Retrieve the element from the vector
-    retrievedShape = (NSVGshape *)vector_get(&nsvg_shape_ptr_vector, lastIndex);
-    if (retrievedShape) {
-        // Print the index and the shape's id to the file
-        fprintf(debug, "\tIndex: %zu, ID: %s\n", lastIndex, retrievedShape->id);
-    }
-  }
+  //End Testing Custom Vector.
+
 
   DynamicShapeArray *fillShapes = createDynamicShapeArray();
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
@@ -1480,6 +1471,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     exit(1);
   }
 
+  //debug new Shape wrapper type
+  fprintf(debug, "Debugging New Shape Struct\n");
+  for(int i = 0; i < pathCount; i++){
+    fprintf(debug, "  Shape at [%d] ID: %s\n", i, shapes[i].nsvgShape->id);
+  }  
+
   BVHNode* bvhRoot;
 
   if(fillShapes->size > 0){
@@ -1503,7 +1500,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     bvhDepth = 0;
     writeBVHNodeToFile(bvhRoot, debug, bvhDepth);
   }
-  
 
   //Simulated annealing implementation for path optimization.
   srand(time(0));

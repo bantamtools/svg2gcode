@@ -13,53 +13,72 @@ size_t vector_size(Vector *v) {
     return v->size;
 }
 
-static void vector_resize(Vector *v, size_t capacity) {
-    void **items = realloc(v->items, sizeof(void *) * capacity);
+static void vector_resize(Vector *v, size_t new_capacity) {
+    void *items = realloc(v->items, v->item_size * new_capacity);
     if (items) {
         v->items = items;
-        v->capacity = capacity;
+        v->capacity = new_capacity;
     }
 }
 
-void vector_add(Vector *v, void *item) {
+void vector_add(Vector *v, void *item, FILE* debug) {
     if (v->capacity == v->size) {
+        // Double vector size on resize.
         vector_resize(v, v->capacity * 2);
     }
-    v->items[v->size] = malloc(v->item_size);
-    if (v->items[v->size]) {
-        memcpy(v->items[v->size], item, v->item_size);
-        v->size++;
+
+    // Calculate the address of the new element
+    void *destination = (char *)v->items + (v->size * v->item_size);
+    
+    // Copy the item into the new location
+    memcpy(destination, item, v->item_size);
+
+    // Increase the size of the vector
+    v->size += 1;
+    
+    // Optional: Debug output
+    if (debug) {
+        fprintf(debug, "Added item to vector, new size: %zu\n", v->size);
     }
-    // Consider handling allocation failure
 }
+
+
+
 
 void *vector_get(Vector *v, size_t index) {
     if (index < v->size) {
-        return v->items[index];
+        return *((void **)((char *)v->items + index * v->item_size));
     }
     return NULL;
 }
 
-void vector_set(Vector *v, size_t index, void *item) {
-    if (index < v->size) {
-        v->items[index] = item;
-    }
-}
+
 
 void vector_delete(Vector *v, size_t index) {
     if (index < v->size) {
-        v->items[index] = NULL;
-        for (size_t i = index; i < v->size - 1; i++) {
-            v->items[i] = v->items[i + 1];
-            v->items[i + 1] = NULL;
-        }
+        // Calculate the address of the element to delete
+        char *base = (char *)v->items;
+        
+        // Move the memory down one element's size
+        memmove(base + index * v->item_size,
+                base + (index + 1) * v->item_size,
+                (v->size - index - 1) * v->item_size);
+
+        // Decrease the size of the vector
         v->size--;
+
+        // Optionally resize the vector if it's much smaller than the capacity
         if (v->size > 0 && v->size == v->capacity / 4) {
             vector_resize(v, v->capacity / 2);
         }
     }
 }
 
+
+
 void vector_free(Vector *v) {
     free(v->items);
+    v->items = NULL;
+    v->size = 0;
+    v->capacity = 0;
 }

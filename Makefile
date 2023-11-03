@@ -36,7 +36,7 @@ transformSettings.o: transformSettings.c transformSettings.h
 	$(GCC) $(CFLAGS) -c transformSettings.c
 
 vector.o: vector.c vector.h
-	$(GCC) $(CFLAGS) -c vector.c
+	$(GCC) $(CFLAGS) -00 -c vector.c 
 
 # Clean up
 clean:
