@@ -1438,11 +1438,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   fprintf(gcode, "  ( ShiftX: %f, ShiftY: %f )\n", settings.shiftX, settings.shiftY);
 #endif
 
-  //Testing custom vector here :)
-
-  //End Testing Custom Vector.
-
-
   DynamicShapeArray *fillShapes = createDynamicShapeArray();
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
@@ -1477,20 +1472,14 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     fprintf(debug, "  Shape at [%d] ID: %s\n", i, shapes[i].nsvgShape->id);
   }  
 
+  fprintf(debug, "Debugging new shape in dynamicShapeArray\n");
+  for(int i = 0; i < fillShapes->size; i++){
+    fprintf(debug, "  FillShape at [%d] ID: %s\n", i, fillShapes->items[i]->id);
+  }
+
   BVHNode* bvhRoot;
 
   if(fillShapes->size > 0){
-    fprintf(debug, "Post Calc Path's fillShapes\n");
-    for (int i = 0; i < fillShapes->size; i++) {
-      fprintf(debug, "    Shape #%s: Bounds %f %f %f %f. Fill: %i\n",
-        fillShapes->items[i]->id,
-        fillShapes->items[i]->bounds[0],
-        fillShapes->items[i]->bounds[1],
-        fillShapes->items[i]->bounds[2],
-        fillShapes->items[i]->bounds[3],
-        fillShapes->items[i]->fill.type);
-      }
-
     //BUILD BVH FOR FILL SHAPES
     printf("Constructing BVH\n");
     int bvhDepth = 0;
