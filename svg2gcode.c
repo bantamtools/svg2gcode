@@ -179,6 +179,7 @@ typedef struct GCodeState {
     int colorCount;
     int useToolOffsets;
     int zDebounce;
+    int numTools;
 } GCodeState;
 
 SVGPoint bezPoints[MAX_BEZ];
@@ -373,8 +374,9 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
 
 int colorToPen(int color, int** penColors, int* penColorCounts){ //returns the pen each color is assigned to.
   int pen = 0;
+  int numPenColorCounts = sizeof(penColorCounts)/sizeof(int);
 
-  for(int i = 0; i < 6; i++){
+  for(int i = 0; i < numPenColorCounts; i++){
     for(int j = 0; j < penColorCounts[i]; j++){
       if(color == penColors[i][j]){
         pen = i;
@@ -458,7 +460,7 @@ int colorInPen(Pen pen, unsigned int color, int colorCount){
 
   //This needs to be redone.
 //calculate the svg space bounds for the image and create initial shape sized list of colors.
-static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int penColorCount[6])
+static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int *penColorCount)
 {
   struct NSVGshape* shape;
   struct NSVGpath* path;
@@ -998,8 +1000,11 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.countIntermediary = 0;
   state.colorToFile = 1;
   state.pathPointsBufIndex = 0;
+ 
+  state.numTools = generationConfig[15];
+  printf("Num tools: %d\n", state.numTools);
 
-  for(int i = 0; i < numTools; i++){
+  for(int i = 0; i < state.numTools; i++){
     state.colorCount += penColorCount[i];
   }
 
@@ -1088,7 +1093,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
     //Hopefully this sets target tool without looking at currTool. Target tool shouldnt change as long as shape[*i].color is same as prev.
     gcodeState->targetColor = shapes[*i].stroke;
     if(gcodeState->targetColor != gcodeState->currColor){
-      for(int tool = 0; tool < numTools; tool++){ //iterate through all 6 possible pen numbers.
+      for(int tool = 0; tool < gcodeState->numTools; tool++){ //iterate through all 6 possible pen numbers.
       int target_color = shapes[*i].stroke; // This is the color we are trying to match against.
         for(int col = 0; col < penColorCount[tool]; col++){ //for the number of colors associated with each tool. If target_colorin penList[tool].colors
           if(penList[tool].colors[col] == target_color){
@@ -1175,7 +1180,7 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   //send paper to front
   if(machineType == MACHINE_MVP_8_5){
     fprintf(gcode, "G0 X11.4 Y0\n");
-    fprintf(gcode, "M0\n");
+    fprintf(gcode, "M0\n"); 
     fprintf(gcode, "G0 Y-82.493\n");
   } else {
     fprintf(gcode, "G0 X0 Y0\n");
@@ -1484,7 +1489,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 
 }
 
-void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[14]) {
+void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[15]) {
     int i, j;
 
     printf("argc:\n\t%d\n", argc);
@@ -1528,7 +1533,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[15], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float paperDimensions[9], int generationConfig[16], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
@@ -1589,16 +1594,16 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   parse_time = ((double) (stop_parse - start_parse)) / CLOCKS_PER_SEC;
 
   //Bank of pens, their slot and their color. Pens also track count of shapes to be drawn with their color (for debug purposes)
-  penList = (Pen*)malloc(numTools*sizeof(Pen));
-  memset(penList, 0, numTools*sizeof(Pen));
+  penList = (Pen*)malloc(gcodeState.numTools*sizeof(Pen));
+  memset(penList, 0, gcodeState.numTools*sizeof(Pen));
   //assign pen colors for penColors input
-  for(int i = 0; i<numTools;i++){
+  for(int i = 0; i < gcodeState.numTools; i++){
     //printf("Tool %d in penColors color: %d\n", i, penColors[i]);
     penList[i].colors = penColors[i]; //assign penList[i].colors to the pointer passed in from penColors (there are numtools poiners to assign.)
   }
 
   //
-  calcBounds(g_image, numTools, penList, penColorCount);
+  calcBounds(g_image, gcodeState.numTools, penList, penColorCount);
   //Settings and calculations for rotation + transformation.
   TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig);
   printTransformSettings(settings);
@@ -1698,11 +1703,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   writeHeader(&gcodeState, gcode, &settings, machineType, paperDimensions);
   printf("Wrote header\n");
   fflush(stdout);
-
-  // for(int i = 0; i < numTools; i++){
-  //   printf("PenColorCount[%d]: %d\n", i, penColorCount[i]);
-  // }
-  // fflush(stdout);
 
   //WRITING PATHS BEGINS HERE. 
   for(i=0;i<pathCount;i++) { //equal to the number of shapes, which is the number of NSVGPaths.
