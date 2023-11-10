@@ -372,11 +372,10 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
   state->npaths = k;
 }
 
-int colorToPen(int color, int** penColors, int* penColorCounts){ //returns the pen each color is assigned to.
+int colorToPen(int color, int** penColors, int* penColorCounts, int numTools){ //returns the pen each color is assigned to.
   int pen = 0;
-  int numPenColorCounts = sizeof(penColorCounts)/sizeof(int);
 
-  for(int i = 0; i < numPenColorCounts; i++){
+  for(int i = 0; i < numTools; i++){
     for(int j = 0; j < penColorCounts[i]; j++){
       if(color == penColors[i][j]){
         pen = i;
@@ -389,7 +388,7 @@ int colorToPen(int color, int** penColors, int* penColorCounts){ //returns the p
 }
 
 //submethod for mergeSort
-void merge(Shape * arr, int left, int mid, int right, int** penColors, int* penColorCounts) {
+void merge(Shape * arr, int left, int mid, int right, int** penColors, int* penColorCounts, int numTools) {
     int n1 = mid - left + 1;
     int n2 = right - mid;
 
@@ -407,7 +406,7 @@ void merge(Shape * arr, int left, int mid, int right, int** penColors, int* penC
 
     int i = 0, j = 0, k = left;
     while (i < n1 && j < n2) {
-        if (colorToPen(leftArr[i].stroke, penColors, penColorCounts) <= colorToPen(rightArr[j].stroke, penColors, penColorCounts)) { //I think we want to sort this by the pen int for each color.
+        if (colorToPen(leftArr[i].stroke, penColors, penColorCounts, numTools) <= colorToPen(rightArr[j].stroke, penColors, penColorCounts, numTools)) { //I think we want to sort this by the pen int for each color.
             arr[k] = leftArr[i];
             i++;
         } else {
@@ -434,16 +433,16 @@ void merge(Shape * arr, int left, int mid, int right, int** penColors, int* penC
 }
 
 //sub array implementation of merge sort for sorting shapes by color
-void mergeSort(Shape * arr, int left, int right, int level, int* mergeLevel, int** penColors, int* penColorCounts) {
+void mergeSort(Shape * arr, int left, int right, int level, int* mergeLevel, int** penColors, int* penColorCounts, int numTools) {
   if(level > *mergeLevel){
     printf("Merge Sort level: %d\n", level);
     *mergeLevel = level;
   }
   if (left < right) {
     int mid = left + (right - left) / 2;
-    mergeSort(arr, left, mid, level+1, mergeLevel, penColors, penColorCounts);
-    mergeSort(arr, mid + 1, right, level+1, mergeLevel, penColors, penColorCounts);
-    merge(arr, left, mid, right, penColors, penColorCounts);
+    mergeSort(arr, left, mid, level+1, mergeLevel, penColors, penColorCounts, numTools);
+    mergeSort(arr, mid + 1, right, level+1, mergeLevel, penColors, penColorCounts, numTools);
+    merge(arr, left, mid, right, penColors, penColorCounts, numTools);
   }
 }
 
@@ -1688,7 +1687,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, f
   if(reorder_colors){
     printf("Sorting shapes by color\n");
     int mergeCount = 0;
-    mergeSort(shapes, 0, pathCount-1, 0, &mergeCount, penColors, penColorCount); //this is stable and can be called on subarrays.
+    mergeSort(shapes, 0, pathCount-1, 0, &mergeCount, penColors, penColorCount, gcodeState.numTools); //this is stable and can be called on subarrays.
     printf("Completed mergeSort\n");
     fflush(stdout);
   }
