@@ -39,10 +39,13 @@
 
 #include <float.h>
 #include <stdint.h>
-#include <sys/time.h>
+#include <time.h>
 #include <sys/types.h>
 #include "svg2gcode.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 //#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
@@ -1732,12 +1735,14 @@ int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, f
         char filename[256];
 
         int len = strlen(argv[optind + 1]);
-        char fileStart[len - 5]; //This will also be the folder.
+        char* fileStart = (char*)malloc(sizeof(char)*(len-5));
+        //char fileStart[len - 5]; //This will also be the folder.
         strncpy(fileStart, argv[optind + 1], len - 6);
         fileStart[len - 6] = '\0';
-
+        
         int nameLen = strlen(fileName);
-        char colFileName[nameLen-5];
+        char* colFileName = (char*)malloc(sizeof(char)*(nameLen-5));
+        //char colFileName[nameLen-5];
         strncpy(colFileName, fileName, nameLen-6);
         colFileName[nameLen-6] = '\0';
         
@@ -1751,6 +1756,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, f
           printf("Failed to open color file: %s\n", filename);
           fflush(stdout);
         }
+
+        free(colFileName);
+        free(fileStart);
 
         gcodeState.colorFileOpen = 1;
 
