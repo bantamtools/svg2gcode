@@ -998,7 +998,7 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.tempy = 0;
   state.trackedDist = 0;
   state.totalDist = 0;
-  state.brushDist = 1000000; //for testing right now. 1,000,000 = 1km should be around normal for a bp pen.
+  state.brushDist = generationConfig[16]; //for testing right now. 1,000,000 = 1km should be around normal for a bp pen.
   state.countIntermediary = 0;
   state.colorToFile = 1;
   state.pathPointsBufIndex = 0;
@@ -1212,6 +1212,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
   fprintf(gcode, "( Left Margin: %f, Right Margin, %f, Top Margin: %f, Bottom Margin: %f )\n", settings->xMarginLeft, settings->xMarginRight, settings->yMarginTop, settings->yMarginTop);
   fprintf(gcode, "( Paper Width: %f, Paper Height: %f )\n", settings->paperWidth, settings->paperHeight);
   fprintf(gcode, "( Number of Paths in File: %d )\n\n", gcodeState->npaths);
+  fprintf(gcode, "( Brush Dist from svgconverter: %fmm )\n", gcodeState->brushDist);
 
   fprintf(gcode, "G90\nG0 M3 S%d\n", 90); //Default header for job
   fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
@@ -1324,6 +1325,11 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
             gcodeState->tempy = py;
             //write out to point.
             fprintf(gcode, "( Intermediary point X:%.4f Y:%.4f)\n", px, py);
+            if(*machineType == MACHINE_LFP_24_36) {
+              fprintf(gcode, "G0 Z%f\nG0 X0 Y-609\nM0\n", gcodeState->ztraverse);
+              fprintf(gcode, "G0 X%f Y%f\n G1 Z%f F%f\n", gcodeState->tempx, gcodeState->tempy, gcodeState->zFeed);
+            }
+
           }
           gcodeState->countIntermediary += numIntermediary;
           //set tracked dist back to dist from last intermediary point to rotatedX and rotatedY.
@@ -1535,7 +1541,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float paperDimensions[9], int generationConfig[16], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float paperDimensions[9], int generationConfig[17], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
