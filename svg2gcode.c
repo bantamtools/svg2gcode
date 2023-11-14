@@ -1156,13 +1156,13 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
       if(gcodeState->useToolOffsets){ //Back to new tool offset when using offsets.
         writeToolOffset(gcode, gcodeState->currTool);
       }
+      gcodeState->trackedDist = 0;
       
 #ifdef DEBUG_OUTPUT
       fprintf(gcode, "    ( Ending Toolchange )\n");
 #endif
     }
   }
-  gcodeState->trackedDist = 0;
   fflush(stdout);
 }
 
