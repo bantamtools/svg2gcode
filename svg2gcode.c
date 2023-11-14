@@ -1162,6 +1162,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
 #endif
     }
   }
+  gcodeState->trackedDist = 0;
   fflush(stdout);
 }
 
