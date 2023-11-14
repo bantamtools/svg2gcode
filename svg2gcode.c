@@ -1330,7 +1330,7 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
             if(*machineType == MACHINE_LFP_24_36) { //intermediary point. break into own procedure.
               fprintf(gcode, "G1 X%.4f Y%.4f\n", px, py, gcodeState->feed);
               fprintf(gcode, "G0 Z%f\nG0 X0 Y-609\nM0\n", gcodeState->ztraverse);
-              fprintf(gcode, "G0 X%f Y%f\nG1 Z%f F%f\n", gcodeState->tempx, gcodeState->tempy, gcodeState->zFloor, gcodeState->zFeed);
+              fprintf(gcode, "G0 X%f Y%f\nG1 Z%f F%d\n", gcodeState->tempx, gcodeState->tempy, gcodeState->zFloor, gcodeState->zFeed);
             }
           }
           gcodeState->countIntermediary += numIntermediary;
