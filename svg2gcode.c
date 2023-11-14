@@ -1142,7 +1142,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
         }
       } else if (machineType == MACHINE_LFP_24_36){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
-        fprintf(gcode, "G0 Z%f\nG0 X0\nG0 Y0\n", gcodeState->ztraverse);
+        fprintf(gcode, "G0 Z%f\nG0 X0 Y-609\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
       } else if (machineType == MACHINE_MVP_8_5){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
@@ -1184,6 +1184,8 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
     fprintf(gcode, "G0 X11.4 Y0\n");
     fprintf(gcode, "M0\n"); 
     fprintf(gcode, "G0 Y-82.493\n");
+  } else if(machineType == MACHINE_LFP_24_36) {
+    fprintf(gcode, "G0 X0 Y-609\n");
   } else {
     fprintf(gcode, "G0 X0 Y0\n");
   }
@@ -1325,11 +1327,11 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
             gcodeState->tempy = py;
             //write out to point.
             fprintf(gcode, "( Intermediary point X:%.4f Y:%.4f)\n", px, py);
-            if(*machineType == MACHINE_LFP_24_36) {
+            if(*machineType == MACHINE_LFP_24_36) { //intermediary point. break into own procedure.
+              fprintf(gcode, "G1 X%.4f Y%.4f\n", px, py, gcodeState->feed);
               fprintf(gcode, "G0 Z%f\nG0 X0 Y-609\nM0\n", gcodeState->ztraverse);
-              fprintf(gcode, "G0 X%f Y%f\n G1 Z%f F%f\n", gcodeState->tempx, gcodeState->tempy, gcodeState->zFeed);
+              fprintf(gcode, "G0 X%f Y%f\nG1 Z%f F%f\n", gcodeState->tempx, gcodeState->tempy, gcodeState->zFloor, gcodeState->zFeed);
             }
-
           }
           gcodeState->countIntermediary += numIntermediary;
           //set tracked dist back to dist from last intermediary point to rotatedX and rotatedY.
