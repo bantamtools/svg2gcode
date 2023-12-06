@@ -59,7 +59,7 @@
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
 #define DOUGLAS_PEUCKER_EPSILON 0.05 //in mm
-#define ACCEPTABLE_OOB_MARGIN 3 //in mm
+#define ACCEPTABLE_OOB_MARGIN 0.5 //in mm
 
 #include <stdio.h>
 #include <math.h>
