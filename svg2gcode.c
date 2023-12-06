@@ -59,6 +59,7 @@
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
 #define DOUGLAS_PEUCKER_EPSILON 0.05 //in mm
+#define ACCEPTABLE_OOB_MARGIN 0.5 //in mm
 
 #include <stdio.h>
 #include <math.h>
@@ -1240,10 +1241,13 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Checking Point: X:%f Y:%f )\n", *px, *py);
 #endif
-      //LEFT X BOUND                                             //RIGHT X BOUND                                             //Lower Y BOUND                                               //UPPER Y BOUND
-  if (*px < settings->centerX - (settings->loadedFileWidth/2)*(settings->scale) || *px > settings->centerX + (settings->loadedFileWidth/2)*(settings->scale) || *py > -1*(settings->centerY) + (settings->loadedFileHeight*settings->scale)/2 || *py< -1*(settings->centerY) - (settings->loadedFileHeight*settings->scale)/2){
-    gcodeState->pointsCulledBounds++;
-     *writeReason = 0;
+                                                                                                                                         
+  if (*px + ACCEPTABLE_OOB_MARGIN < settings->centerX - (settings->loadedFileWidth/2)*(settings->scale) //LEFT X BOUND 
+    || *px - ACCEPTABLE_OOB_MARGIN > settings->centerX + (settings->loadedFileWidth/2)*(settings->scale) //RIGHT X BOUND  
+    || *py -ACCEPTABLE_OOB_MARGIN > -1*(settings->centerY) + (settings->loadedFileHeight*settings->scale)/2 //Lower Y BOUND  
+    || *py + ACCEPTABLE_OOB_MARGIN < -1*(settings->centerY) - (settings->loadedFileHeight*settings->scale)/2){ //UPPER Y BOUND
+      gcodeState->pointsCulledBounds++;
+      *writeReason = 0;
     return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     *writeReason = 1;
