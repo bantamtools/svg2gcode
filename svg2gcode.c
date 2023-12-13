@@ -50,8 +50,8 @@
 //#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 //#define DEBUG_SP
-#define DEBUG_TOOLCHANGE
-#define DEBUG_INIT
+//#define DEBUG_TOOLCHANGE
+//#define DEBUG_INIT
 #define BTSVG
 #define MAX_BEZ 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
