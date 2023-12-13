@@ -50,6 +50,8 @@
 //#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 //#define DEBUG_SP
+#define DEBUG_TOOLCHANGE
+#define DEBUG_INIT
 #define BTSVG
 #define MAX_BEZ 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
@@ -71,7 +73,6 @@ static int sixColorWidth = 306;
 
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
-static int numTools = 6;
 float bounds[4];
 static int pathCount,pointsCount,shapeCount;
 static struct NSVGimage* g_image = NULL;
@@ -134,7 +135,7 @@ typedef struct TransformSettings {
     int swapDim;
     int svgRotation;
     int contentsToDrawspace;
-    float* pointBounds;
+    float * pointBounds;
     float paperWidth;
     float paperHeight;
 } TransformSettings;
@@ -184,6 +185,7 @@ typedef struct GCodeState {
     int useToolOffsets;
     int zDebounce;
     int numTools;
+    int startEndPauses;
 } GCodeState;
 
 SVGPoint bezPoints[MAX_BEZ];
@@ -974,6 +976,10 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.colorMatch = 0;
   state.toolChangePos = -51.5;
   state.zDebounce = generationConfig[14];
+  state.startEndPauses = generationConfig[17];
+  if(state.startEndPauses){
+    state.currTool = 0; //do not do first tool change if currTool init to 0. Tools are processed in ascending order starting from 0, so ignore first toolchange.
+  }
 
   state.zMid = (state.zFloor - state.ztraverse) * 0.2;
   state.zMid = state.zFloor - state.zMid;
@@ -1090,13 +1096,20 @@ void writeToolOffset(FILE* gcode, int tool){
   fprintf(gcode, "G%d\n", offset);
 }
 
+int startStopPause(GCodeState* gcodeState){ //Return 0 if not doing startEnd pauses, 1 if doing.
+  if(gcodeState->currTool == -1 && gcodeState->startEndPauses == 0){ //If we are on first tool and we turned off the start stop pause, do not do initial toolchange/pause.
+    return 0;
+  }
+  return 1;
+}
+
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
   if(machineType == MACHINE_6COLOR || machineType == MACHINE_MVP_8_5 || machineType == MACHINE_LFP_24_36){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
     //Hopefully this sets target tool without looking at currTool. Target tool shouldnt change as long as shape[*i].color is same as prev.
     gcodeState->targetColor = shapes[*i].stroke;
     if(gcodeState->targetColor != gcodeState->currColor){
-      for(int tool = 0; tool < gcodeState->numTools; tool++){ //iterate through all 6 possible pen numbers.
+      for(int tool = 0; tool < gcodeState->numTools; tool++){ //iterate through all possible pen numbers.
       int target_color = shapes[*i].stroke; // This is the color we are trying to match against.
         for(int col = 0; col < penColorCount[tool]; col++){ //for the number of colors associated with each tool. If target_colorin penList[tool].colors
           if(penList[tool].colors[col] == target_color){
@@ -1111,11 +1124,9 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
     if(gcodeState->targetTool != gcodeState->currTool){ //This is true if toolchange/pickup is neccesary.
       gcodeState->trackedDist = 0;
 
-#ifdef DEBUG_OUTPUT
+#ifdef DEBUG_TOOLCHANGE
   fprintf(gcode, "    ( Beginning Toolchange )\n");
   fprintf(gcode, "    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
-  printf("    ( Beginning Toolchange )\n");
-  printf("    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
   fflush(stdout);
 #endif
       if(gcodeState->useToolOffsets){ //Back to absolute position for toolchanges
@@ -1142,11 +1153,11 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
           fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
           fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
         }
-      } else if (machineType == MACHINE_LFP_24_36){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+      } else if (machineType == MACHINE_LFP_24_36 && startStopPause(gcodeState)){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
         fprintf(gcode, "G0 Z%f\nG0 X0 Y-609\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
-      } else if (machineType == MACHINE_MVP_8_5){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+      } else if (machineType == MACHINE_MVP_8_5 && startStopPause(gcodeState)){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
         fprintf(gcode, "G0 Z%f\nG0 X11.4\nG0 Y0\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
@@ -1158,7 +1169,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
       if(gcodeState->useToolOffsets){ //Back to new tool offset when using offsets.
         writeToolOffset(gcode, gcodeState->currTool);
       }
-#ifdef DEBUG_OUTPUT
+#ifdef DEBUG_TOOLCHANGE
       fprintf(gcode, "    ( Ending Toolchange )\n");
 #endif
     }
@@ -1183,8 +1194,10 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   //send paper to front
   if(machineType == MACHINE_MVP_8_5){
     fprintf(gcode, "G0 X11.4 Y0\n");
-    fprintf(gcode, "M0\n"); 
-    fprintf(gcode, "G0 Y-82.493\n");
+    if(gcodeState->startEndPauses){
+      fprintf(gcode, "M0\n"); 
+    }
+    //fprintf(gcode, "G0 Y-82.493\n");
   } else if(machineType == MACHINE_LFP_24_36) {
     fprintf(gcode, "G0 X0 Y-609\n");
   } else {
@@ -1208,6 +1221,9 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
 void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* settings, int machineType, float* paperDimensions) {
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "( Machine Type: %i )\n", machineType);
+#endif
+#ifdef DEBUG_INIT
+  fprintf(gcode, "( CurrColor: %d )\n", gcodeState->startEndPauses);
 #endif
   fprintf(gcode, "( Generated with Bantam Tools Vector Software Version %d.%d.%d on %s at %s )\n", BTSVG_VERSION_MAJOR, BTSVG_VERSION_MINOR, BTSVG_VERSION_PATCH, __DATE__, __TIME__);
   fprintf(gcode, "( XY Feedrate: %d, Z Feedrate: %d )\n", gcodeState->feed, gcodeState->zFeed);
@@ -1503,7 +1519,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 
 }
 
-void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[15]) {
+void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[15], GCodeState* gcodeState) {
     int i, j;
 
     printf("argc:\n\t%d\n", argc);
@@ -1514,7 +1530,7 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
     }
 
     printf("penColors:\n");
-    for(i = 0; i < numTools; i++) {
+    for(i = 0; i < gcodeState->numTools; i++) {
         printf("\t%d: ", i+1);
         for(j = 0; j < penColorCount[i]; j++) {
             printf("%d ", penColors[i][j]);
@@ -1523,7 +1539,7 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
     }
 
     printf("penColorCount:\n");
-    for(i = 0; i < numTools; i++) {
+    for(i = 0; i < gcodeState->numTools; i++) {
         printf("\t%d: %d\n", i, penColorCount[i]);
     }
 
@@ -1547,7 +1563,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float paperDimensions[9], int generationConfig[17], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float paperDimensions[9], int generationConfig[18], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
@@ -1785,7 +1801,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, f
     
 
     //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
-    writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, shapes, &i);
+    writeToolchange(&gcodeState, machineType, gcode, gcodeState.numTools, penList, penColorCount, shapes, &i);
 
     //WRITING MOVES FOR DRAWING 
     writeShape(gcode, color_gcode, &gcodeState, &settings, shapes, toolPaths, &machineType, &k, &i);
