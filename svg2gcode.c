@@ -93,7 +93,7 @@ typedef struct {
   int slot;
 } Pen;
 
-typedef struct {
+typedef struct { //Think I can do away with these entirely.
   float points[8];
   int shape; //corresponds to a shape id. 
   char closed;
@@ -977,9 +977,9 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.toolChangePos = -51.5;
   state.zDebounce = generationConfig[14];
   state.startEndPauses = generationConfig[17];
-  if(state.startEndPauses){
-    state.currTool = 0; //do not do first tool change if currTool init to 0. Tools are processed in ascending order starting from 0, so ignore first toolchange.
-  }
+  // if(state.startEndPauses){
+  //   state.currTool = 0; //do not do first tool change if currTool init to 0. Tools are processed in ascending order starting from 0, so ignore first toolchange.
+  // }
 
   state.zMid = (state.zFloor - state.ztraverse) * 0.2;
   state.zMid = state.zFloor - state.zMid;
@@ -1097,9 +1097,12 @@ void writeToolOffset(FILE* gcode, int tool){
 }
 
 int startStopPause(GCodeState* gcodeState){ //Return 0 if not doing startEnd pauses, 1 if doing.
+  printf("Checking start/stop pause\n");
   if(gcodeState->currTool == -1 && gcodeState->startEndPauses == 0){ //If we are on first tool and we turned off the start stop pause, do not do initial toolchange/pause.
+    printf("Skip first toolchange\n");
     return 0;
   }
+  printf("Doing toolchange\n");
   return 1;
 }
 
@@ -1159,7 +1162,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
         fprintf(gcode, "M0\n");
       } else if (machineType == MACHINE_MVP_8_5 && startStopPause(gcodeState)){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
-        fprintf(gcode, "G0 Z%f\nG0 X11.4\nG0 Y0\n", gcodeState->ztraverse);
+        fprintf(gcode, "G0 Z%f\nG0 X31.4\nG0 Y0\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
       }
       
