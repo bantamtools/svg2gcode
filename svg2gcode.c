@@ -88,6 +88,11 @@ typedef struct {
 } SVGPoint;
 
 typedef struct {
+  float x;
+  float y;
+} Point;
+
+typedef struct {
   int *colors;
   int count; //Count of shapes to be drawn with this pen.
   int slot;
@@ -103,6 +108,7 @@ typedef struct {
   int id;
   int numToolpaths;
   unsigned int stroke;
+  Point startPoint;
 } Shape;
 
 typedef struct TransformSettings {
@@ -186,6 +192,7 @@ typedef struct GCodeState {
     int zDebounce;
     int numTools;
     int startEndPauses;
+    int sortByY;
 } GCodeState;
 
 SVGPoint bezPoints[MAX_BEZ];
@@ -306,7 +313,7 @@ static void cubicBez(float x1, float y1, float x2, float y2,
     collinear = 1;
   }
 
-  d = distPtSeg(x1234, y1234, x1,y1, x4,y4);
+  d = distPtSeg(x1234, y1234, x1,y1, x4,y4); //Distance from midpoint between line defined by endpoints of bez.
   if (d > tol*tol) {
     cubicBez(x1,y1, x12,y12, x123,y123, x1234,y1234, tol, level+1);
     cubicBez(x1234,y1234, x234,y234, x34,y34, x4,y4, tol, level+1);
@@ -342,6 +349,8 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
     for (path = shape->paths; path != NULL; path = path->next) { //For each path in shape.
       shapes[i].id = i;
       shapes[i].stroke = shape->stroke.color;
+      shapes[i].startPoint.x = path->pts[0]; //First point of path into shape for sorting in mergeSort.
+      shapes[i].startPoint.y = path->pts[1];
       for (j = 0; j < path->npts - 1; j += 3) { //iterates through all the paths in a single shape.
         float* pp = &path->pts[j * 2];
         if (j == 0) {
@@ -393,8 +402,33 @@ int colorToPen(int color, int** penColors, int* penColorCounts, int numTools){ /
   return pen;
 }
 
+int compareShapesMerge(Shape* a, Shape* b, int** penColors, int* penColorCounts, int numTools, int sortByY, int svgRotation){
+  int colorToPenA = colorToPen(a->stroke, penColors, penColorCounts, numTools);
+  int colorToPenB = colorToPen(b->stroke, penColors, penColorCounts, numTools);
+
+  if(colorToPenA != colorToPenB){
+    return colorToPenA - colorToPenB;
+  }
+
+  if(sortByY){ //change this to sort by X if svgRotation is 90 or 270 degrees, and reverse if 180.
+    switch(svgRotation){
+      case 0:
+        return a->startPoint.y - b->startPoint.y;
+      case 1:
+        return a->startPoint.x - b->startPoint.x;
+      case 2:
+        return b->startPoint.y - a->startPoint.y;
+      case 3:
+        return b->startPoint.x - a->startPoint.x;
+    }
+    
+  }
+  
+  return 1;
+}
+
 //submethod for mergeSort
-void merge(Shape * arr, int left, int mid, int right, int** penColors, int* penColorCounts, int numTools) {
+void merge(Shape * arr, int svgRotation, int left, int mid, int right, int** penColors, int* penColorCounts, int numTools, int sortByY) {
     int n1 = mid - left + 1;
     int n2 = right - mid;
 
@@ -412,7 +446,9 @@ void merge(Shape * arr, int left, int mid, int right, int** penColors, int* penC
 
     int i = 0, j = 0, k = left;
     while (i < n1 && j < n2) {
-        if (colorToPen(leftArr[i].stroke, penColors, penColorCounts, numTools) <= colorToPen(rightArr[j].stroke, penColors, penColorCounts, numTools)) { //I think we want to sort this by the pen int for each color.
+        int comparison = compareShapesMerge(&leftArr[i], &rightArr[j], penColors, penColorCounts, numTools, sortByY, svgRotation);
+
+        if(comparison <= 0){
             arr[k] = leftArr[i];
             i++;
         } else {
@@ -439,16 +475,16 @@ void merge(Shape * arr, int left, int mid, int right, int** penColors, int* penC
 }
 
 //sub array implementation of merge sort for sorting shapes by color
-void mergeSort(Shape * arr, int left, int right, int level, int* mergeLevel, int** penColors, int* penColorCounts, int numTools) {
+void mergeSort(Shape * arr, int svgRotation, int left, int right, int level, int* mergeLevel, int** penColors, int* penColorCounts, int numTools, int sortByY) {
   if(level > *mergeLevel){
     printf("Merge Sort level: %d\n", level);
     *mergeLevel = level;
   }
   if (left < right) {
     int mid = left + (right - left) / 2;
-    mergeSort(arr, left, mid, level+1, mergeLevel, penColors, penColorCounts, numTools);
-    mergeSort(arr, mid + 1, right, level+1, mergeLevel, penColors, penColorCounts, numTools);
-    merge(arr, left, mid, right, penColors, penColorCounts, numTools);
+    mergeSort(arr, svgRotation, left, mid, level+1, mergeLevel, penColors, penColorCounts, numTools, sortByY);
+    mergeSort(arr, svgRotation, mid + 1, right, level+1, mergeLevel, penColors, penColorCounts, numTools, sortByY);
+    merge(arr, svgRotation, left, mid, right, penColors, penColorCounts, numTools, sortByY);
   }
 }
 
@@ -787,7 +823,7 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
     //before the rotation is applied. These may be the same as the final center points too (as in the case where center
     //on material is true). Need a separate calc for centerX and centerY for correct translation back?
     printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
-    printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
+    printf("centerX:%f, centcrY:%f\n", settings.centerX, settings.centerY);
     fflush(stdout);
 
     settings.cosRot = cos((90 * settings.svgRotation) * (M_PI / 180)); 
@@ -977,9 +1013,7 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.toolChangePos = -51.5;
   state.zDebounce = generationConfig[14];
   state.startEndPauses = generationConfig[17];
-  // if(state.startEndPauses){
-  //   state.currTool = 0; //do not do first tool change if currTool init to 0. Tools are processed in ascending order starting from 0, so ignore first toolchange.
-  // }
+  state.sortByY = generationConfig[18];
 
   state.zMid = (state.zFloor - state.ztraverse) * 0.2;
   state.zMid = state.zFloor - state.zMid;
@@ -1566,7 +1600,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float paperDimensions[9], int generationConfig[18], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float paperDimensions[9], int generationConfig[19], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
@@ -1705,7 +1739,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, f
   int reorder_paths = generationConfig[13];
   int reorder_colors = generationConfig[12];
 
-  if(reorder_paths){
+  if(reorder_paths && !gcodeState.sortByY){
     printf("Paths %d Points %d\n",pathCount, pointsCount);
     start_sa = clock();
     simulatedAnnealing(shapes, points, pathCount, initialTempExp, coolingRate, gcodeState.quality, saNumComp);
@@ -1715,13 +1749,17 @@ int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, f
 
     printf("Finished Path-Opt\n");
   }
+
+  if(gcodeState.sortByY == 1){
+    printf("To sort by y called\n");
+  }
   
   fflush(stdout);
 
   if(reorder_colors){
     printf("Sorting shapes by color\n");
     int mergeCount = 0;
-    mergeSort(shapes, 0, pathCount-1, 0, &mergeCount, penColors, penColorCount, gcodeState.numTools); //this is stable and can be called on subarrays.
+    mergeSort(shapes, settings.svgRotation, 0, pathCount-1, 0, &mergeCount, penColors, penColorCount, gcodeState.numTools, gcodeState.sortByY); //this is stable and can be called on subarrays.
     printf("Completed mergeSort\n");
     fflush(stdout);
   }
