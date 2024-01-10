@@ -354,7 +354,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
       for (j = 0; j < path->npts - 1; j += 3) { //iterates through all the paths in a single shape.
         float* pp = &path->pts[j * 2];
         if (j == 0) {
-            points[i].x = pp[0];
+            points[i].x = pp[0]; //Bez P1
             points[i].y = pp[1];
         }
         bezCount++;
@@ -551,7 +551,7 @@ float svgPointDistance(SVGPoint * p1, SVGPoint * p2) {
     return sqrt(dx * dx + dy * dy);
 }
 
-float svgPointDistanceSA(SVGPoint * p1, SVGPoint * p2) {
+float svgPointDistanceSA(SVGPoint * p1, SVGPoint * p2) { //Calculates distance of "midpoints"
     float midx1 = (p1->x + p1->xn) / 2;
     float midy1 = (p1->y + p1->yn) / 2;
     float midx2 = (p2->x + p2->xn) / 2;
@@ -1230,11 +1230,11 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
 
   //send paper to front
   if(machineType == MACHINE_MVP_8_5){
-    fprintf(gcode, "G0 X11.4 Y0\n");
     if(gcodeState->startEndPauses){
       fprintf(gcode, "M0\n"); 
+      fprintf(gcode, "G0 X11.4 Y0\n");
     }
-    //fprintf(gcode, "G0 Y-82.493\n");
+    fprintf(gcode, "G0 Y-82.493\n");
   } else if(machineType == MACHINE_LFP_24_36) {
     fprintf(gcode, "G0 X0 Y-609\n");
   } else {
